@@ -36,6 +36,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tantivy::{collector::Collector, query::Query, Index, ReloadPolicy, Searcher, Term};
 use tokio::task::spawn_blocking;
+use tracing::*;
 
 fn global_split_footer_cache() -> &'static MemorySizedCache<String> {
     static INSTANCE: OnceCell<MemorySizedCache<String>> = OnceCell::new();
@@ -109,13 +110,18 @@ pub(crate) async fn open_index(
 ///
 /// The downloaded data depends on the query (which term's posting list is required,
 /// are position required too), and the collector.
+#[tracing::instrument(skip(searcher, query, fast_field_names))]
 pub(crate) async fn warmup(
     searcher: &Searcher,
     query: &dyn Query,
     fast_field_names: &HashSet<String>,
 ) -> anyhow::Result<()> {
-    warm_up_terms(searcher, query).await?;
-    warm_up_fastfields(searcher, fast_field_names).await?;
+    warm_up_terms(searcher, query)
+        .instrument(info_span!("warm_up_terms"))
+        .await?;
+    warm_up_fastfields(searcher, fast_field_names)
+        .instrument(info_span!("warm_up_fastfields"))
+        .await?;
     Ok(())
 }
 
@@ -176,6 +182,7 @@ async fn warm_up_terms(searcher: &Searcher, query: &dyn Query) -> anyhow::Result
 }
 
 /// Apply a leaf search on a single split.
+#[tracing::instrument(skip(search_request, storage, split, index_config))]
 async fn leaf_search_single_split(
     search_request: &SearchRequest,
     storage: Arc<dyn Storage>,
@@ -245,6 +252,7 @@ pub async fn leaf_search(
     let merge_collector = make_merge_collector(request);
     let mut merged_search_results =
         spawn_blocking(move || merge_collector.merge_fruits(search_results))
+            .instrument(info_span!("merge_search_results"))
             .await
             .with_context(|| "Merging search on split results failed")??;
 
