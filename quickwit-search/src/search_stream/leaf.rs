@@ -38,7 +38,7 @@ use tantivy::ReloadPolicy;
 use tantivy::Searcher;
 use tokio::task::spawn_blocking;
 use tokio_stream::wrappers::UnboundedReceiverStream;
-use tracing::error;
+use tracing::*;
 
 // TODO: buffer of 5 seems to be sufficient to do the job locally, needs to be tested on a cluster.
 const CONCURRENT_SPLIT_SEARCH_STREAM: usize = 5;
