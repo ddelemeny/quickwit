@@ -20,6 +20,7 @@
  */
 
 mod args;
+mod counters;
 mod error;
 mod grpc;
 mod grpc_adapter;
@@ -48,6 +49,7 @@ use quickwit_storage::{
 use quickwit_telemetry::payload::{ServeEvent, TelemetryEvent};
 
 pub use crate::args::ServeArgs;
+pub use crate::counters::COUNTERS;
 pub use crate::error::ApiError;
 use crate::grpc::start_grpc_service;
 use crate::grpc_adapter::cluster_adapter::GrpcClusterAdapter;
