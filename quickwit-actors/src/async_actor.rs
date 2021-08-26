@@ -87,7 +87,7 @@ pub(crate) fn spawn_async_actor<A: AsyncActor>(
     kill_switch: KillSwitch,
     scheduler_mailbox: Mailbox<SchedulerMessage>,
 ) -> (Mailbox<A::Message>, ActorHandle<A>) {
-    debug!(actor_name=%actor.name(),"spawning-async-actor");
+    debug!(actor_name = %actor.name(), "spawning-async-actor");
     let (state_tx, state_rx) = watch::channel(actor.observable_state());
     let actor_name = actor.name();
     let queue_capacity = actor.queue_capacity();
