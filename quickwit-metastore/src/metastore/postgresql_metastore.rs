@@ -264,16 +264,16 @@ impl Metastore for PostgresqlMetastore {
         })?;
 
         // Fit the time_range to the database model.
-        let start_time_range = if let Some(range) = metadata.split_metadata.time_range.clone() {
-            Some(range.start().clone())
-        } else {
-            None
-        };
-        let end_time_range = if let Some(range) = metadata.split_metadata.time_range.clone() {
-            Some(range.end().clone())
-        } else {
-            None
-        };
+        let start_time_range = metadata
+            .split_metadata
+            .time_range
+            .clone()
+            .map(|range| *range.start());
+        let end_time_range = metadata
+            .split_metadata
+            .time_range
+            .clone()
+            .map(|range| *range.end());
 
         let conn = self
             .connection_pool
@@ -709,7 +709,7 @@ impl MetastoreFactory for PostgresqlMetastoreFactory {
     async fn resolve(&self, uri: &str) -> Result<Arc<dyn Metastore>, MetastoreResolverError> {
         let metastore = PostgresqlMetastore::new(uri)
             .await
-            .map_err(|err| MetastoreResolverError::FailedToOpenMetastore(err))?;
+            .map_err(MetastoreResolverError::FailedToOpenMetastore)?;
 
         Ok(Arc::new(metastore))
     }
