@@ -391,6 +391,15 @@ impl Metastore for PostgresqlMetastore {
         Ok(())
     }
 
+    async fn replace_splits<'a>(
+        &self,
+        index_id: &str,
+        new_split_ids: &[&'a str],
+        replaced_split_ids: &[&'a str],
+    ) -> MetastoreResult<()> {
+        unimplemented!()
+    }
+
     async fn list_splits(
         &self,
         index_id: &str,
