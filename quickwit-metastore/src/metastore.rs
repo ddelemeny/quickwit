@@ -30,6 +30,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use chrono::Utc;
+use num::FromPrimitive;
 use quickwit_index_config::IndexConfig;
 use serde::{Deserialize, Serialize};
 
@@ -129,6 +130,28 @@ pub enum SplitState {
 impl Default for SplitState {
     fn default() -> Self {
         Self::New
+    }
+}
+
+impl FromPrimitive for SplitState {
+    fn from_i64(num_split_state: i64) -> Option<SplitState> {
+        match num_split_state {
+            0 => Some(SplitState::New),
+            1 => Some(SplitState::Staged),
+            2 => Some(SplitState::Published),
+            3 => Some(SplitState::ScheduledForDeletion),
+            _ => None,
+        }
+    }
+
+    fn from_u64(num_split_state: u64) -> Option<SplitState> {
+        match num_split_state {
+            0 => Some(SplitState::New),
+            1 => Some(SplitState::Staged),
+            2 => Some(SplitState::Published),
+            3 => Some(SplitState::ScheduledForDeletion),
+            _ => None,
+        }
     }
 }
 

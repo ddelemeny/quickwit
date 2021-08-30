@@ -27,6 +27,7 @@ header:
     - '**/target/**'
     - 'quickwit-proto/src/cluster.rs'
     - 'quickwit-proto/src/quickwit.rs'
+    - 'quickwit-metastore/src/schema.rs'
 
   paths:
     - '**/*.rs'
