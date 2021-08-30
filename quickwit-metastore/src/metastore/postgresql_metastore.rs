@@ -21,7 +21,6 @@
 */
 
 use std::ops::Range;
-use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -30,14 +29,10 @@ use chrono::Utc;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::result::DatabaseErrorKind;
 use diesel::result::Error::DatabaseError;
-use diesel::BoolExpressionMethods;
-use diesel::Connection;
-use diesel::ExpressionMethods;
-use diesel::PgConnection;
-use diesel::QueryDsl;
-use diesel::RunQueryDsl;
+use diesel::{
+    BoolExpressionMethods, Connection, ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl,
+};
 use dotenv::dotenv;
-use num::FromPrimitive;
 use tracing::{debug, error, info};
 
 use crate::metastore::{Checkpoint, CheckpointDelta};
@@ -49,7 +44,6 @@ use crate::MetastoreError;
 use crate::MetastoreFactory;
 use crate::MetastoreResolverError;
 use crate::MetastoreResult;
-use crate::SplitMetadata;
 use crate::SplitMetadataAndFooterOffsets;
 use crate::SplitState;
 
@@ -122,6 +116,7 @@ fn initialize_db(pool: &Pool<ConnectionManager<PgConnection>>) -> anyhow::Result
 
 /// PostgreSQL metastore implementation.
 pub struct PostgresqlMetastore {
+    uri: String,
     connection_pool: Arc<Pool<ConnectionManager<PgConnection>>>,
 }
 
@@ -156,7 +151,10 @@ impl PostgresqlMetastore {
             cause: anyhow::anyhow!(err),
         })?;
 
-        Ok(PostgresqlMetastore { connection_pool })
+        Ok(PostgresqlMetastore {
+            uri: database_uri.to_string(),
+            connection_pool,
+        })
     }
 }
 
@@ -400,7 +398,80 @@ impl Metastore for PostgresqlMetastore {
         time_range_opt: Option<Range<i64>>,
         tags: &[String],
     ) -> MetastoreResult<Vec<SplitMetadataAndFooterOffsets>> {
-        unimplemented!()
+        let conn = self
+            .connection_pool
+            .get()
+            .map_err(|err| MetastoreError::InternalError {
+                message: "Failed to get connection".to_string(),
+                cause: anyhow::anyhow!(err),
+            })?;
+
+        let statement = if let Some(time_range) = time_range_opt {
+            schema::splits::dsl::splits
+                .filter(
+                    schema::splits::dsl::index_id
+                        .eq(index_id)
+                        .and(schema::splits::dsl::split_state.eq(state as i32))
+                        .and(
+                            schema::splits::dsl::end_time_range
+                                .ge(time_range.start)
+                                .or(schema::splits::dsl::start_time_range.lt(time_range.end)),
+                        ),
+                )
+                .into_boxed()
+        } else {
+            schema::splits::dsl::splits
+                .filter(
+                    schema::splits::dsl::index_id
+                        .eq(index_id)
+                        .and(schema::splits::dsl::split_state.eq(state as i32)),
+                )
+                .into_boxed()
+        };
+
+        let model_splits: Vec<model::Split> =
+            statement
+                .load(&conn)
+                .map_err(|err| MetastoreError::InternalError {
+                    message: "Failed to select splits".to_string(),
+                    cause: anyhow::anyhow!(err),
+                })?;
+
+        // Make the split metadata and footer offsets from database model.
+        let mut split_metadata_footer_offset_list: Vec<SplitMetadataAndFooterOffsets> = Vec::new();
+        for model_split in model_splits {
+            let split_metadata_and_footer_offsets =
+                match model_split.make_split_metadata_and_footer_offsets() {
+                    Ok(metadata) => metadata,
+                    Err(err) => {
+                        error!("Failed to make split metadata and footer offsets {:?}", err);
+                        continue;
+                    }
+                };
+
+            // The tags are empty (unspecified) or the tags are specified
+            // and the split has a matching tag, it will be added to the list.
+            let mut match_tag = false;
+            if tags.is_empty() {
+                match_tag = true;
+            } else {
+                for tag in tags {
+                    if split_metadata_and_footer_offsets
+                        .split_metadata
+                        .tags
+                        .contains(tag)
+                    {
+                        match_tag = true;
+                        break;
+                    }
+                }
+            }
+            if match_tag {
+                split_metadata_footer_offset_list.push(split_metadata_and_footer_offsets);
+            }
+        }
+
+        Ok(split_metadata_footer_offset_list)
     }
 
     async fn list_all_splits(
@@ -426,51 +497,15 @@ impl Metastore for PostgresqlMetastore {
         // Make the split metadata and footer offsets from database model.
         let mut split_metadata_footer_offset_list: Vec<SplitMetadataAndFooterOffsets> = Vec::new();
         for model_split in model_splits {
-            let time_range: Option<RangeInclusive<i64>> =
-                model_split.start_time_range.and_then(|start_time_range| {
-                    model_split
-                        .end_time_range
-                        .map(|end_time_range| RangeInclusive::new(start_time_range, end_time_range))
-                });
-
-            let split_state =
-                if let Some(split_state) = SplitState::from_i64(model_split.split_state as i64) {
-                    split_state
-                } else {
-                    error!("unknown split state {:?}", model_split.split_state);
-                    continue;
+            let split_metadata_and_footer_offsets =
+                match model_split.make_split_metadata_and_footer_offsets() {
+                    Ok(metadata) => metadata,
+                    Err(err) => {
+                        error!("Failed to make split metadata and footer offsets {:?}", err);
+                        continue;
+                    }
                 };
-
-            let tags: Vec<String> = serde_json::from_str(&model_split.tags).map_err(|err| {
-                MetastoreError::InternalError {
-                    message: format!(
-                        "Failed to deserialize tags in the split {:?}",
-                        &model_split.split_id
-                    ),
-                    cause: anyhow::anyhow!(err),
-                }
-            })?;
-
-            let split_metadata = SplitMetadata {
-                split_id: model_split.split_id,
-                num_records: model_split.num_records as usize,
-                size_in_bytes: model_split.size_in_bytes as u64,
-                time_range,
-                generation: model_split.generation as usize,
-                split_state,
-                update_timestamp: model_split.update_timestamp,
-                tags,
-            };
-
-            let footer_offsets: Range<u64> = Range {
-                start: model_split.start_footer_offset as u64,
-                end: model_split.end_footer_offset as u64,
-            };
-
-            split_metadata_footer_offset_list.push(SplitMetadataAndFooterOffsets {
-                split_metadata,
-                footer_offsets,
-            })
+            split_metadata_footer_offset_list.push(split_metadata_and_footer_offsets);
         }
 
         Ok(split_metadata_footer_offset_list)
@@ -481,7 +516,37 @@ impl Metastore for PostgresqlMetastore {
         index_id: &str,
         split_ids: &[&'a str],
     ) -> MetastoreResult<()> {
-        unimplemented!()
+        let conn = self
+            .connection_pool
+            .get()
+            .map_err(|err| MetastoreError::InternalError {
+                message: "Failed to get connection".to_string(),
+                cause: anyhow::anyhow!(err),
+            })?;
+
+        conn.transaction::<_, diesel::result::Error, _>(|| {
+            // Updatre split metadata.
+            diesel::update(
+                schema::splits::dsl::splits.filter(
+                    schema::splits::dsl::index_id
+                        .eq(index_id)
+                        .and(schema::splits::dsl::split_id.eq_any(split_ids)),
+                ),
+            )
+            .set((
+                schema::splits::dsl::split_state.eq(SplitState::ScheduledForDeletion as i32),
+                schema::splits::dsl::update_timestamp.eq(Utc::now().timestamp()),
+            ))
+            .execute(&*conn)?;
+
+            Ok(())
+        })
+        .map_err(|err| MetastoreError::InternalError {
+            message: "Failed to mark splits as deleted".to_string(),
+            cause: anyhow::anyhow!(err),
+        })?;
+
+        Ok(())
     }
 
     async fn delete_splits<'a>(
@@ -489,15 +554,90 @@ impl Metastore for PostgresqlMetastore {
         index_id: &str,
         split_ids: &[&'a str],
     ) -> MetastoreResult<()> {
-        unimplemented!()
+        let conn = self
+            .connection_pool
+            .get()
+            .map_err(|err| MetastoreError::InternalError {
+                message: "Failed to get connection".to_string(),
+                cause: anyhow::anyhow!(err),
+            })?;
+
+        conn.transaction::<_, diesel::result::Error, _>(|| {
+            // Updatre split metadata.
+            diesel::update(
+                schema::splits::dsl::splits.filter(
+                    schema::splits::dsl::index_id
+                        .eq(index_id)
+                        .and(schema::splits::dsl::split_id.eq_any(split_ids)),
+                ),
+            )
+            .set((
+                schema::splits::dsl::split_state.eq(SplitState::ScheduledForDeletion as i32),
+                schema::splits::dsl::update_timestamp.eq(Utc::now().timestamp()),
+            ))
+            .execute(&*conn)?;
+
+            let num = diesel::delete(
+                schema::splits::dsl::splits.filter(
+                    schema::splits::dsl::index_id.eq(index_id).and(
+                        schema::splits::dsl::split_id.eq_any(split_ids).and(
+                            schema::splits::dsl::split_state
+                                .eq(SplitState::ScheduledForDeletion as i32)
+                                .or(schema::splits::dsl::split_state.eq(SplitState::Staged as i32)),
+                        ),
+                    ),
+                ),
+            )
+            .execute(&*conn)?;
+            if num == 0 {
+                return Err(diesel::result::Error::NotFound);
+            }
+
+            Ok(())
+        })
+        .map_err(|err| MetastoreError::InternalError {
+            message: "Failed to mark splits as deleted".to_string(),
+            cause: anyhow::anyhow!(err),
+        })?;
+
+        Ok(())
     }
 
     async fn index_metadata(&self, index_id: &str) -> MetastoreResult<IndexMetadata> {
-        unimplemented!()
+        let conn = self
+            .connection_pool
+            .get()
+            .map_err(|err| MetastoreError::InternalError {
+                message: "Failed to get connection".to_string(),
+                cause: anyhow::anyhow!(err),
+            })?;
+
+        let model_index = schema::indexes::dsl::indexes
+            .filter(schema::indexes::dsl::index_id.eq(index_id))
+            .first::<model::Index>(&conn)
+            .map_err(|err| match err {
+                diesel::result::Error::NotFound => MetastoreError::IndexDoesNotExist {
+                    index_id: index_id.to_string(),
+                },
+                _ => MetastoreError::InternalError {
+                    message: "Failed to select index".to_string(),
+                    cause: anyhow::anyhow!(err),
+                },
+            })?;
+
+        let index_metadata =
+            model_index
+                .make_index_metadata()
+                .map_err(|err| MetastoreError::InternalError {
+                    message: "Failed to make index metadata".to_string(),
+                    cause: anyhow::anyhow!(err),
+                })?;
+
+        Ok(index_metadata)
     }
 
     fn uri(&self) -> String {
-        unimplemented!()
+        self.uri.clone()
     }
 }
 

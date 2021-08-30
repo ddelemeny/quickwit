@@ -42,7 +42,9 @@ pub mod checkpoint;
 mod error;
 mod metastore;
 mod metastore_resolver;
+#[allow(missing_docs)]
 pub mod model;
+#[allow(missing_docs)]
 pub mod schema;
 
 pub use error::{MetastoreError, MetastoreResolverError, MetastoreResult};
