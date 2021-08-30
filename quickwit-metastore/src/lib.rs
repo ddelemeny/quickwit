@@ -31,11 +31,19 @@ etc.
 #[macro_use]
 mod tests;
 
+#[macro_use]
+extern crate diesel_migrations;
+
+#[macro_use]
+extern crate diesel;
+
 #[allow(missing_docs)]
 pub mod checkpoint;
 mod error;
 mod metastore;
 mod metastore_resolver;
+pub mod model;
+pub mod schema;
 
 pub use error::{MetastoreError, MetastoreResolverError, MetastoreResult};
 pub use metastore::single_file_metastore::SingleFileMetastore;

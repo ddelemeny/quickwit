@@ -30,6 +30,9 @@ use crate::checkpoint::IncompatibleCheckpoint;
 #[allow(missing_docs)]
 #[derive(Debug, Error)]
 pub enum MetastoreError {
+    #[error("Connection error: `{message}`.")]
+    ConnectionError { message: String },
+
     #[error("Index `{index_id}` already exists.")]
     IndexAlreadyExists { index_id: String },
 

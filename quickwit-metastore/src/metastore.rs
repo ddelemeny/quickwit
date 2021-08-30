@@ -20,6 +20,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+pub mod postgresql_metastore;
 pub mod single_file_metastore;
 
 use std::collections::HashSet;

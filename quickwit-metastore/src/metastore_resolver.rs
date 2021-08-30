@@ -25,6 +25,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::metastore::postgresql_metastore::PostgresqlMetastoreFactory;
 use crate::metastore::single_file_metastore::SingleFileMetastoreFactory;
 use crate::{Metastore, MetastoreResolverError};
 
@@ -68,6 +69,7 @@ impl Default for MetastoreUriResolver {
             .register("file", SingleFileMetastoreFactory::default())
             .register("s3", SingleFileMetastoreFactory::default())
             .register("s3+localstack", SingleFileMetastoreFactory::default())
+            .register("postgresql", PostgresqlMetastoreFactory::default())
             .build()
     }
 }
