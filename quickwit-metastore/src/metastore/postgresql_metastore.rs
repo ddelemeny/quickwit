@@ -397,7 +397,51 @@ impl Metastore for PostgresqlMetastore {
         new_split_ids: &[&'a str],
         replaced_split_ids: &[&'a str],
     ) -> MetastoreResult<()> {
-        unimplemented!()
+        let conn = self
+            .connection_pool
+            .get()
+            .map_err(|err| MetastoreError::InternalError {
+                message: "Failed to get connection".to_string(),
+                cause: anyhow::anyhow!(err),
+            })?;
+
+        conn.transaction::<_, diesel::result::Error, _>(|| {
+            // Publish new splits.
+            diesel::update(
+                schema::splits::dsl::splits.filter(
+                    schema::splits::dsl::index_id
+                        .eq(index_id)
+                        .and(schema::splits::dsl::split_id.eq_any(new_split_ids)),
+                ),
+            )
+            .set((
+                schema::splits::dsl::split_state.eq(SplitState::Published as i32),
+                schema::splits::dsl::update_timestamp.eq(Utc::now().timestamp()),
+            ))
+            .execute(&*conn)?;
+
+            // Mark splits to be replaced as deleted.
+            diesel::update(
+                schema::splits::dsl::splits.filter(
+                    schema::splits::dsl::index_id
+                        .eq(index_id)
+                        .and(schema::splits::dsl::split_id.eq_any(replaced_split_ids)),
+                ),
+            )
+            .set((
+                schema::splits::dsl::split_state.eq(SplitState::ScheduledForDeletion as i32),
+                schema::splits::dsl::update_timestamp.eq(Utc::now().timestamp()),
+            ))
+            .execute(&*conn)?;
+
+            Ok(())
+        })
+        .map_err(|err| MetastoreError::InternalError {
+            message: "Failed to publish splits".to_string(),
+            cause: anyhow::anyhow!(err),
+        })?;
+
+        Ok(())
     }
 
     async fn list_splits(
