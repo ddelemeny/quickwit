@@ -26,6 +26,8 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::Utc;
+use diesel::debug_query;
+use diesel::pg::Pg;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::result::DatabaseErrorKind;
 use diesel::result::Error::DatabaseError;
@@ -33,6 +35,7 @@ use diesel::{
     BoolExpressionMethods, Connection, ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl,
 };
 use dotenv::dotenv;
+use tokio::sync::OnceCell;
 use tracing::{debug, error, info};
 
 use crate::metastore::{Checkpoint, CheckpointDelta};
@@ -114,7 +117,19 @@ fn initialize_db(pool: &Pool<ConnectionManager<PgConnection>>) -> anyhow::Result
     Ok(())
 }
 
+pub async fn get_postgresql_metastore(database_uri: &str) -> &'static PostgresqlMetastore {
+    static POSTGRESQL_METASTORE: OnceCell<PostgresqlMetastore> = OnceCell::const_new();
+    POSTGRESQL_METASTORE
+        .get_or_init(|| async {
+            PostgresqlMetastore::new(database_uri)
+                .await
+                .expect("PostgreSQL metastore is not initialized")
+        })
+        .await
+}
+
 /// PostgreSQL metastore implementation.
+#[derive(Clone)]
 pub struct PostgresqlMetastore {
     uri: String,
     connection_pool: Arc<Pool<ConnectionManager<PgConnection>>>,
@@ -147,41 +162,15 @@ impl PostgresqlMetastore {
             .await;
         }
 
-        initialize_db(&*connection_pool).map_err(|err| MetastoreError::InternalError {
-            message: "Failed to initialize database".to_string(),
-            cause: anyhow::anyhow!(err),
-        })?;
+        match initialize_db(&*connection_pool) {
+            Ok(_) => info!("Database initialized"),
+            Err(err) => error!("Failed to initialize database {:?}", err),
+        }
 
         Ok(PostgresqlMetastore {
             uri: database_uri.to_string(),
             connection_pool,
         })
-    }
-
-    /// Deletes all data in tables on the database.
-    #[cfg(test)]
-    fn cleanup(&self) -> MetastoreResult<()> {
-        let conn = self
-            .connection_pool
-            .get()
-            .map_err(|err| MetastoreError::InternalError {
-                message: "Failed to get connection".to_string(),
-                cause: anyhow::anyhow!(err),
-            })?;
-
-        conn.transaction::<_, diesel::result::Error, _>(|| {
-            diesel::delete(schema::splits::dsl::splits).execute(&*conn)?;
-            
-            diesel::delete(schema::indexes::dsl::indexes).execute(&*conn)?;
-            
-            Ok(())
-        })
-        .map_err(|err| MetastoreError::InternalError {
-            message: "Failed to delete all data in tables on database".to_string(),
-            cause: anyhow::anyhow!(err),
-        })?;
-
-        Ok(())
     }
 }
 
@@ -229,11 +218,9 @@ impl Metastore for PostgresqlMetastore {
         })
         .map_err(|err| match err {
             DatabaseError(kind, err_info) => match kind {
-                DatabaseErrorKind::UniqueViolation => {
-                    MetastoreError::IndexAlreadyExists {
-                        index_id: index_metadata.index_id.clone(),
-                    }
-                }
+                DatabaseErrorKind::UniqueViolation => MetastoreError::IndexAlreadyExists {
+                    index_id: index_metadata.index_id.clone(),
+                },
                 _ => MetastoreError::InternalError {
                     message: "Failed to create index".to_string(),
                     cause: anyhow::anyhow!(err_info.message().to_string()),
@@ -335,9 +322,20 @@ impl Metastore for PostgresqlMetastore {
 
             Ok(())
         })
-        .map_err(|err| MetastoreError::InternalError {
-            message: "Failed to stage split".to_string(),
-            cause: anyhow::anyhow!(err),
+        .map_err(|err| match err {
+            DatabaseError(kind, err_info) => match kind {
+                DatabaseErrorKind::ForeignKeyViolation => MetastoreError::IndexDoesNotExist {
+                    index_id: index_id.to_string(),
+                },
+                _ => MetastoreError::InternalError {
+                    message: "Failed to create index".to_string(),
+                    cause: anyhow::anyhow!(err_info.message().to_string()),
+                },
+            },
+            _ => MetastoreError::InternalError {
+                message: "Failed to create index".to_string(),
+                cause: anyhow::anyhow!(err),
+            },
         })?;
 
         Ok(())
@@ -390,6 +388,38 @@ impl Metastore for PostgresqlMetastore {
                 cause: anyhow::anyhow!(err),
             })?;
 
+        // Check for the inclusion of non-publishable split IDs.
+        let non_publishable_splits: Vec<model::Split> = schema::splits::dsl::splits
+            .filter(
+                schema::splits::dsl::index_id.eq(index_id).and(
+                    schema::splits::dsl::split_id.eq_any(split_ids).and(
+                        schema::splits::dsl::split_state
+                            .ne(SplitState::Staged as i32)
+                            .and(schema::splits::dsl::split_state.ne(SplitState::Published as i32)),
+                    ),
+                ),
+            )
+            .get_results(&conn)
+            .map_err(|err| match err {
+                diesel::result::Error::NotFound => MetastoreError::IndexDoesNotExist {
+                    index_id: index_id.to_string(),
+                },
+                _ => MetastoreError::InternalError {
+                    message: "Failed to select index".to_string(),
+                    cause: anyhow::anyhow!(err),
+                },
+            })?;
+        if !non_publishable_splits.is_empty() {
+            let mut non_publishable_split_id = "".to_string();
+            if let Some(non_publishable_split) = non_publishable_splits.first() {
+                non_publishable_split_id = non_publishable_split.split_id.clone();
+            }
+            return Err(MetastoreError::SplitIsNotStaged {
+                split_id: non_publishable_split_id,
+            });
+        }
+
+        let mut error_split_id = "";
         conn.transaction::<_, diesel::result::Error, _>(|| {
             // Update index metadata.
             diesel::update(schema::indexes::dsl::indexes.find(index_id))
@@ -397,7 +427,7 @@ impl Metastore for PostgresqlMetastore {
                 .execute(&*conn)?;
 
             // Updatre split metadata.
-            diesel::update(
+            let updated_splits: Vec<model::Split> = diesel::update(
                 schema::splits::dsl::splits.filter(
                     schema::splits::dsl::index_id
                         .eq(index_id)
@@ -408,13 +438,33 @@ impl Metastore for PostgresqlMetastore {
                 schema::splits::dsl::split_state.eq(SplitState::Published as i32),
                 schema::splits::dsl::update_timestamp.eq(Utc::now().timestamp()),
             ))
-            .execute(&*conn)?;
+            .get_results(&*conn)?;
+
+            // Splits that are not updated are treated as errors because they are non-existent splits.
+            if updated_splits.len() < split_ids.len() {
+                for split_id in split_ids.iter() {
+                    if !updated_splits
+                        .iter()
+                        .map(|updated_split| updated_split.split_id.clone())
+                        .any(|x| x == *split_id)
+                    {
+                        error_split_id = split_id;
+                        break;
+                    }
+                }
+                return Err(diesel::result::Error::NotFound);
+            }
 
             Ok(())
         })
-        .map_err(|err| MetastoreError::InternalError {
-            message: "Failed to publish splits".to_string(),
-            cause: anyhow::anyhow!(err),
+        .map_err(|err| match err {
+            diesel::result::Error::NotFound => MetastoreError::SplitDoesNotExist {
+                split_id: error_split_id.to_string(),
+            },
+            _ => MetastoreError::InternalError {
+                message: "Failed to publish splits".to_string(),
+                cause: anyhow::anyhow!(err),
+            },
         })?;
 
         Ok(())
@@ -606,9 +656,25 @@ impl Metastore for PostgresqlMetastore {
                 cause: anyhow::anyhow!(err),
             })?;
 
+        // Check for the existence of index.
+        let index_exists: bool = diesel::select(diesel::dsl::exists(
+            schema::indexes::dsl::indexes.filter(schema::indexes::dsl::index_id.eq(index_id)),
+        ))
+        .get_result(&conn)
+        .map_err(|err| MetastoreError::InternalError {
+            message: "Failed to check for the existence of a split".to_string(),
+            cause: anyhow::anyhow!(err),
+        })?;
+        if !index_exists {
+            return Err(MetastoreError::IndexDoesNotExist {
+                index_id: index_id.to_string(),
+            });
+        }
+
+        let mut error_split_id = "";
         conn.transaction::<_, diesel::result::Error, _>(|| {
             // Updatre split metadata.
-            diesel::update(
+            let updated_splits: Vec<model::Split> = diesel::update(
                 schema::splits::dsl::splits.filter(
                     schema::splits::dsl::index_id
                         .eq(index_id)
@@ -619,13 +685,33 @@ impl Metastore for PostgresqlMetastore {
                 schema::splits::dsl::split_state.eq(SplitState::ScheduledForDeletion as i32),
                 schema::splits::dsl::update_timestamp.eq(Utc::now().timestamp()),
             ))
-            .execute(&*conn)?;
+            .get_results(&*conn)?;
+
+            // Splits that are not updated are treated as errors because they are non-existent splits.
+            if updated_splits.len() < split_ids.len() {
+                for split_id in split_ids.iter() {
+                    if !updated_splits
+                        .iter()
+                        .map(|updated_split| updated_split.split_id.clone())
+                        .any(|x| x == *split_id)
+                    {
+                        error_split_id = split_id;
+                        break;
+                    }
+                }
+                return Err(diesel::result::Error::NotFound);
+            }
 
             Ok(())
         })
-        .map_err(|err| MetastoreError::InternalError {
-            message: "Failed to mark splits as deleted".to_string(),
-            cause: anyhow::anyhow!(err),
+        .map_err(|err| match err {
+            diesel::result::Error::NotFound => MetastoreError::SplitDoesNotExist {
+                split_id: error_split_id.to_string(),
+            },
+            _ => MetastoreError::InternalError {
+                message: "Failed to mark splits as deleted".to_string(),
+                cause: anyhow::anyhow!(err),
+            },
         })?;
 
         Ok(())
@@ -644,22 +730,60 @@ impl Metastore for PostgresqlMetastore {
                 cause: anyhow::anyhow!(err),
             })?;
 
-        conn.transaction::<_, diesel::result::Error, _>(|| {
-            // Updatre split metadata.
-            diesel::update(
-                schema::splits::dsl::splits.filter(
-                    schema::splits::dsl::index_id
-                        .eq(index_id)
-                        .and(schema::splits::dsl::split_id.eq_any(split_ids)),
+        // Check for the existence of index.
+        let index_exists: bool = diesel::select(diesel::dsl::exists(
+            schema::indexes::dsl::indexes.filter(schema::indexes::dsl::index_id.eq(index_id)),
+        ))
+        .get_result(&conn)
+        .map_err(|err| MetastoreError::InternalError {
+            message: "Failed to check for the existence of a split".to_string(),
+            cause: anyhow::anyhow!(err),
+        })?;
+        if !index_exists {
+            return Err(MetastoreError::IndexDoesNotExist {
+                index_id: index_id.to_string(),
+            });
+        }
+
+        // Check for the inclusion of non-deletable split IDs.
+        let non_deletable_splits: Vec<model::Split> = schema::splits::dsl::splits
+            .filter(
+                schema::splits::dsl::index_id.eq(index_id).and(
+                    schema::splits::dsl::split_id.eq_any(split_ids).and(
+                        schema::splits::dsl::split_state
+                            .ne(SplitState::Staged as i32)
+                            .and(
+                                schema::splits::dsl::split_state
+                                    .ne(SplitState::ScheduledForDeletion as i32),
+                            ),
+                    ),
                 ),
             )
-            .set((
-                schema::splits::dsl::split_state.eq(SplitState::ScheduledForDeletion as i32),
-                schema::splits::dsl::update_timestamp.eq(Utc::now().timestamp()),
-            ))
-            .execute(&*conn)?;
+            .get_results(&conn)
+            .map_err(|err| match err {
+                diesel::result::Error::NotFound => MetastoreError::IndexDoesNotExist {
+                    index_id: index_id.to_string(),
+                },
+                _ => MetastoreError::InternalError {
+                    message: "Failed to select index".to_string(),
+                    cause: anyhow::anyhow!(err),
+                },
+            })?;
+        if !non_deletable_splits.is_empty() {
+            let mut non_deletable_split_id = "".to_string();
+            if let Some(non_deletable_split) = non_deletable_splits.first() {
+                non_deletable_split_id = non_deletable_split.split_id.clone();
+            }
+            let message: String = format!(
+                "This split {:?} is not in a deletable state",
+                non_deletable_split_id
+            );
+            return Err(MetastoreError::Forbidden { message });
+        }
 
-            let num = diesel::delete(
+        let mut error_split_id = "";
+        conn.transaction::<_, diesel::result::Error, _>(|| {
+            let delete_statement = diesel::delete(
                 schema::splits::dsl::splits.filter(
                     schema::splits::dsl::index_id.eq(index_id).and(
                         schema::splits::dsl::split_id.eq_any(split_ids).and(
@@ -669,17 +793,35 @@ impl Metastore for PostgresqlMetastore {
                         ),
                     ),
                 ),
-            )
-            .execute(&*conn)?;
-            if num == 0 {
+            );
+            debug!(sql=%debug_query::<Pg, _>(&delete_statement).to_string());
+            let deleted_splits: Vec<model::Split> = delete_statement.get_results(&*conn)?;
+
+            // Splits that are not deleted are treated as errors because they are non-existent splits.
+            if deleted_splits.len() < split_ids.len() {
+                for split_id in split_ids.iter() {
+                    if !deleted_splits
+                        .iter()
+                        .map(|deleted_split| deleted_split.split_id.clone())
+                        .any(|x| x == *split_id)
+                    {
+                        error_split_id = split_id;
+                        break;
+                    }
+                }
                 return Err(diesel::result::Error::NotFound);
             }
 
             Ok(())
         })
-        .map_err(|err| MetastoreError::InternalError {
-            message: "Failed to mark splits as deleted".to_string(),
-            cause: anyhow::anyhow!(err),
+        .map_err(|err| match err {
+            diesel::result::Error::NotFound => MetastoreError::SplitDoesNotExist {
+                split_id: error_split_id.to_string(),
+            },
+            _ => MetastoreError::InternalError {
+                message: "Failed to mark splits as deleted".to_string(),
+                cause: anyhow::anyhow!(err),
+            },
         })?;
 
         Ok(())
@@ -736,11 +878,9 @@ impl Default for PostgresqlMetastoreFactory {
 #[async_trait]
 impl MetastoreFactory for PostgresqlMetastoreFactory {
     async fn resolve(&self, uri: &str) -> Result<Arc<dyn Metastore>, MetastoreResolverError> {
-        let metastore = PostgresqlMetastore::new(uri)
-            .await
-            .map_err(MetastoreResolverError::FailedToOpenMetastore)?;
+        let metastore = get_postgresql_metastore(uri).await;
 
-        Ok(Arc::new(metastore))
+        Ok(Arc::new((*metastore).clone()))
     }
 }
 
@@ -749,13 +889,13 @@ impl MetastoreFactory for PostgresqlMetastoreFactory {
 impl crate::tests::DefaultForTest for PostgresqlMetastore {
     async fn default_for_test() -> Self {
         use std::env;
+
         dotenv().ok();
+
         let database_url = env::var("TEST_DATABASE_URL").unwrap();
-        let metastore = PostgresqlMetastore::new(&database_url).await.unwrap();
+        let metastore = get_postgresql_metastore(&database_url).await;
 
-        // metastore.cleanup().unwrap();
-
-        metastore
+        (*metastore).clone()
     }
 }
 

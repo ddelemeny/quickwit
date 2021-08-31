@@ -2061,6 +2061,7 @@ dependencies = [
  "dotenv",
  "mockall 0.9.1",
  "num",
+ "once_cell",
  "quickwit-index-config",
  "quickwit-storage",
  "serde",

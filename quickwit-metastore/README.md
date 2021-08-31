@@ -14,6 +14,10 @@ $ cd quickwit-metastore
 $ docker-compose up
 ```
 
+```
+$ docker-compose rm -f
+```
+
 Setup diesel.rs
 
 Create .env file.
@@ -40,3 +44,10 @@ $ diesel migration run
 ```
 
 `quickwit-metastore/src/schema.rs` will be generated.
+
+
+Unit testing
+
+```
+$ cargo test -- --test-threads=1
+```
