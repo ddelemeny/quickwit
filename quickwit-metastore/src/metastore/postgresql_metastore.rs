@@ -121,6 +121,7 @@ pub struct PostgresqlMetastore {
 }
 
 impl PostgresqlMetastore {
+    /// Creates a meta store given a storage.
     pub async fn new(database_uri: &str) -> MetastoreResult<Self> {
         let connection_pool = Arc::new(establish_connection(database_uri).map_err(|err| {
             MetastoreError::ConnectionError {
@@ -155,6 +156,32 @@ impl PostgresqlMetastore {
             uri: database_uri.to_string(),
             connection_pool,
         })
+    }
+
+    /// Deletes all data in tables on the database.
+    #[cfg(test)]
+    fn cleanup(&self) -> MetastoreResult<()> {
+        let conn = self
+            .connection_pool
+            .get()
+            .map_err(|err| MetastoreError::InternalError {
+                message: "Failed to get connection".to_string(),
+                cause: anyhow::anyhow!(err),
+            })?;
+
+        conn.transaction::<_, diesel::result::Error, _>(|| {
+            diesel::delete(schema::splits::dsl::splits).execute(&*conn)?;
+            
+            diesel::delete(schema::indexes::dsl::indexes).execute(&*conn)?;
+            
+            Ok(())
+        })
+        .map_err(|err| MetastoreError::InternalError {
+            message: "Failed to delete all data in tables on database".to_string(),
+            cause: anyhow::anyhow!(err),
+        })?;
+
+        Ok(())
     }
 }
 
@@ -202,9 +229,11 @@ impl Metastore for PostgresqlMetastore {
         })
         .map_err(|err| match err {
             DatabaseError(kind, err_info) => match kind {
-                DatabaseErrorKind::UniqueViolation => MetastoreError::IndexAlreadyExists {
-                    index_id: index_metadata.index_id.clone(),
-                },
+                DatabaseErrorKind::UniqueViolation => {
+                    MetastoreError::IndexAlreadyExists {
+                        index_id: index_metadata.index_id.clone(),
+                    }
+                }
                 _ => MetastoreError::InternalError {
                     message: "Failed to create index".to_string(),
                     cause: anyhow::anyhow!(err_info.message().to_string()),
@@ -714,3 +743,20 @@ impl MetastoreFactory for PostgresqlMetastoreFactory {
         Ok(Arc::new(metastore))
     }
 }
+
+#[cfg(test)]
+#[async_trait]
+impl crate::tests::DefaultForTest for PostgresqlMetastore {
+    async fn default_for_test() -> Self {
+        use std::env;
+        dotenv().ok();
+        let database_url = env::var("TEST_DATABASE_URL").unwrap();
+        let metastore = PostgresqlMetastore::new(&database_url).await.unwrap();
+
+        // metastore.cleanup().unwrap();
+
+        metastore
+    }
+}
+
+metastore_test_suite!(crate::PostgresqlMetastore);

@@ -48,6 +48,7 @@ pub mod model;
 pub mod schema;
 
 pub use error::{MetastoreError, MetastoreResolverError, MetastoreResult};
+pub use metastore::postgresql_metastore::PostgresqlMetastore;
 pub use metastore::single_file_metastore::SingleFileMetastore;
 pub use metastore::{
     IndexMetadata, MetadataSet, Metastore, SplitMetadata, SplitMetadataAndFooterOffsets, SplitState,
