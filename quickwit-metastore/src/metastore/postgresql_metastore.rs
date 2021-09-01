@@ -20,7 +20,6 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-use diesel::QueryResult;
 use std::ops::Range;
 use std::sync::Arc;
 use std::time::Duration;
@@ -32,6 +31,7 @@ use diesel::pg::Pg;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::result::DatabaseErrorKind;
 use diesel::result::Error::DatabaseError;
+use diesel::QueryResult;
 use diesel::{
     BoolExpressionMethods, Connection, ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl,
 };
