@@ -290,10 +290,8 @@ pub async fn test_metastore_publish_splits<MetastoreToTest: Metastore + DefaultF
             .unwrap();
         assert!(matches!(result, ()));
 
-        let result = metastore
-            .publish_splits(index_id, &[split_id_1], CheckpointDelta::default())
-            .await
-            .unwrap();
+        // Delete index.
+        let result = metastore.delete_index(index_id).await.unwrap();
         assert!(matches!(result, ()));
 
         let result = metastore.delete_index(index_id).await.unwrap();
@@ -383,6 +381,7 @@ pub async fn test_metastore_publish_splits<MetastoreToTest: Metastore + DefaultF
             .unwrap();
         assert!(matches!(result, ()));
 
+        // Create an index
         let result = metastore
             .publish_splits(
                 index_id,
@@ -457,12 +456,9 @@ pub async fn test_metastore_publish_splits<MetastoreToTest: Metastore + DefaultF
             .unwrap();
         assert!(matches!(result, ()));
 
+        // Delete a non-existent index
         let result = metastore
-            .publish_splits(
-                index_id,
-                &[split_id_1, "non-existent-split"],
-                CheckpointDelta::from(24..26),
-            )
+            .delete_index("non-existent-index")
             .await
             .unwrap_err();
         assert!(matches!(result, MetastoreError::SplitIsNotStaged { .. }));
@@ -652,18 +648,12 @@ pub async fn test_metastore_replace_splits<MetastoreToTest: Metastore + DefaultF
         },
     };
 
-    // Replace splits on a non-existent index
-    {
+        // Get a non-existent index metadata
         let result = metastore
-            .replace_splits(
-                "non-existent-index",
-                &["non-existent-split-one"],
-                &["non-existent-split-two"],
-            )
+            .index_metadata("non-existent-index")
             .await
             .unwrap_err();
         assert!(matches!(result, MetastoreError::IndexDoesNotExist { .. }));
-    }
 
     // Replace a non-existent split on an index
     {
@@ -673,15 +663,9 @@ pub async fn test_metastore_replace_splits<MetastoreToTest: Metastore + DefaultF
             .unwrap();
         assert!(matches!(result, ()));
 
-        let result = metastore
-            .replace_splits(
-                index_id,
-                &["non-existent-split"],
-                &["non-existent-split-two"],
-            )
-            .await
-            .unwrap_err();
-        assert!(matches!(result, MetastoreError::SplitDoesNotExist { .. }));
+        // Get an index metadata
+        let result = metastore.index_metadata(index_id).await.unwrap();
+        assert!(matches!(result, index_metadata));
 
         let result = metastore.delete_index(index_id).await.unwrap();
         assert!(matches!(result, ()));
@@ -708,7 +692,7 @@ pub async fn test_metastore_replace_splits<MetastoreToTest: Metastore + DefaultF
         assert!(matches!(result, ()));
 
         let result = metastore
-            .replace_splits(index_id, &[split_id_2], &[split_id_1])
+            .stage_split("non-existent-index", split_metadata.clone())
             .await
             .unwrap_err();
         assert!(matches!(result, MetastoreError::SplitDoesNotExist { .. }));
@@ -788,11 +772,12 @@ pub async fn test_metastore_replace_splits<MetastoreToTest: Metastore + DefaultF
             .unwrap();
         assert!(matches!(result, ()));
 
+        // Stage a existent-split on an index
         let result = metastore
-            .replace_splits(index_id, &[split_id_2, split_id_3], &[split_id_1])
+            .stage_split(index_id, split_metadata.clone())
             .await
             .unwrap_err();
-        assert!(matches!(result, MetastoreError::SplitDoesNotExist { .. }));
+        assert!(matches!(result, MetastoreError::InternalError { .. }));
 
         let result = metastore.delete_index(index_id).await.unwrap();
         assert!(matches!(result, ()));
@@ -829,11 +814,34 @@ pub async fn test_metastore_replace_splits<MetastoreToTest: Metastore + DefaultF
             .unwrap();
         assert!(matches!(result, ()));
 
-        let result = metastore
-            .replace_splits(index_id, &[split_id_2, split_id_3], &[split_id_1])
-            .await
-            .unwrap();
-        assert!(matches!(result, ()));
+        // Publish a published split on an index
+        {
+            metastore
+                .create_index(index_metadata.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .stage_split(index_id, split_metadata_1.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .publish_splits(index_id, &[split_id_1], CheckpointDelta::from(1..12))
+                .await
+                .unwrap();
+
+            let publish_error = metastore
+                .publish_splits(index_id, &[split_id_1], CheckpointDelta::from(1..12))
+                .await
+                .unwrap_err();
+            assert!(matches!(
+                publish_error,
+                MetastoreError::IncompatibleCheckpointDelta(_)
+            ));
+
+            cleanup_index(&metastore, index_id).await;
+        }
 
         let result = metastore.delete_index(index_id).await.unwrap();
         assert!(matches!(result, ()));
@@ -869,14 +877,40 @@ pub async fn test_metastore_mark_splits_as_deleted<MetastoreToTest: Metastore + 
         },
     };
 
-    // Mark a split as deleted on a non-existent index
-    {
-        let result = metastore
-            .mark_splits_as_deleted("non-existent-index", &["non-existent-split"])
-            .await
-            .unwrap_err();
-        assert!(matches!(result, MetastoreError::IndexDoesNotExist { .. }));
-    }
+        // Publish a non-staged split and non-existant split on an index
+        {
+            metastore
+                .create_index(index_metadata.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .stage_split(index_id, split_metadata_1.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .publish_splits(index_id, &[split_id_1], CheckpointDelta::from(18..24))
+                .await
+                .unwrap();
+
+            metastore
+                .mark_splits_as_deleted(index_id, &[split_id_1])
+                .await
+                .unwrap();
+
+            let result = metastore
+                .publish_splits(
+                    index_id,
+                    &[split_id_1, "non-existent-split"],
+                    CheckpointDelta::from(24..26),
+                )
+                .await
+                .unwrap_err();
+            assert!(matches!(result, MetastoreError::SplitIsNotStaged { .. }));
+
+            cleanup_index(&metastore, index_id).await;
+        }
 
     // Mark a non-existent split as deleted on an index
     {
@@ -886,11 +920,40 @@ pub async fn test_metastore_mark_splits_as_deleted<MetastoreToTest: Metastore + 
             .unwrap();
         assert!(matches!(result, ()));
 
-        let result = metastore
-            .mark_splits_as_deleted(index_id, &["non-existent-split"])
-            .await
-            .unwrap_err();
-        assert!(matches!(result, MetastoreError::SplitDoesNotExist { .. }));
+        // Publish a staged split and published split on an index
+        {
+            metastore
+                .create_index(index_metadata.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .stage_split(index_id, split_metadata_1.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .stage_split(index_id, split_metadata_2.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .publish_splits(index_id, &[split_id_2], CheckpointDelta::from(26..28))
+                .await
+                .unwrap();
+
+            let result = metastore
+                .publish_splits(
+                    index_id,
+                    &[split_id_1, split_id_2],
+                    CheckpointDelta::from(28..30),
+                )
+                .await
+                .unwrap();
+            assert!(matches!(result, ()));
+
+            cleanup_index(&metastore, index_id).await;
+        }
 
         let result = metastore.delete_index(index_id).await.unwrap();
         assert!(matches!(result, ()));
@@ -910,11 +973,25 @@ pub async fn test_metastore_mark_splits_as_deleted<MetastoreToTest: Metastore + 
             .unwrap();
         assert!(matches!(result, ()));
 
-        let result = metastore
-            .mark_splits_as_deleted(index_id, &[split_id_1])
-            .await
-            .unwrap();
-        assert!(matches!(result, ()));
+        // Replace a non-existent split on an index
+        {
+            metastore
+                .create_index(index_metadata.clone())
+                .await
+                .unwrap();
+
+            let result = metastore
+                .replace_splits(
+                    index_id,
+                    &["non-existent-split"],
+                    &["non-existent-split-two"],
+                )
+                .await
+                .unwrap_err();
+            assert!(matches!(result, MetastoreError::SplitDoesNotExist { .. }));
+
+            cleanup_index(&metastore, index_id).await;
+        }
 
         let result = metastore.delete_index(index_id).await.unwrap();
         assert!(matches!(result, ()));
@@ -950,13 +1027,41 @@ pub async fn test_metastore_delete_splits<MetastoreToTest: Metastore + DefaultFo
         },
     };
 
-    // Delete a split as deleted on a non-existent index
-    {
-        let result = metastore
-            .delete_splits("non-existent-index", &["non-existent-split"])
-            .await
-            .unwrap_err();
-        assert!(matches!(result, MetastoreError::IndexDoesNotExist { .. }));
+        // Replace a publish split with staged splits
+        {
+            metastore
+                .create_index(index_metadata.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .stage_split(index_id, split_metadata_1.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .publish_splits(index_id, &[split_id_1], CheckpointDelta::default())
+                .await
+                .unwrap();
+
+            metastore
+                .stage_split(index_id, split_metadata_2.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .stage_split(index_id, split_metadata_3.clone())
+                .await
+                .unwrap();
+
+            let result = metastore
+                .replace_splits(index_id, &[split_id_2, split_id_3], &[split_id_1])
+                .await
+                .unwrap();
+            assert!(matches!(result, ()));
+
+            cleanup_index(&metastore, index_id).await;
+        }
     }
 
     // Delete a non-existent split as deleted on an index
@@ -991,11 +1096,8 @@ pub async fn test_metastore_delete_splits<MetastoreToTest: Metastore + DefaultFo
             .unwrap();
         assert!(matches!(result, ()));
 
-        let result = metastore
-            .delete_splits(index_id, &[split_id_1])
-            .await
-            .unwrap();
-        assert!(matches!(result, ()));
+            cleanup_index(&metastore, index_id).await;
+        }
 
         let result = metastore.delete_index(index_id).await.unwrap();
         assert!(matches!(result, ()));
@@ -1051,11 +1153,31 @@ pub async fn test_metastore_delete_splits<MetastoreToTest: Metastore + DefaultFo
             .unwrap();
         assert!(matches!(result, ()));
 
-        let result = metastore
-            .delete_splits(index_id, &[split_id_1])
-            .await
-            .unwrap_err();
-        assert!(matches!(result, MetastoreError::Forbidden { .. }));
+        // Delete a split that has been marked as deleted on an index
+        {
+            metastore
+                .create_index(index_metadata.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .stage_split(index_id, split_metadata_1.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .mark_splits_as_deleted(index_id, &[split_id_1])
+                .await
+                .unwrap();
+
+            let result = metastore
+                .delete_splits(index_id, &[split_id_1])
+                .await
+                .unwrap();
+            assert!(matches!(result, ()));
+
+            cleanup_index(&metastore, index_id).await;
+        }
 
         let result = metastore.delete_index(index_id).await.unwrap();
         assert!(matches!(result, ()));
@@ -1147,13 +1269,443 @@ pub async fn test_metastore_list_all_splits<MetastoreToTest: Metastore + Default
         },
     };
 
-    // List all splits on a non-existent index
-    {
-        let result = metastore
-            .list_all_splits("non-existent-index")
-            .await
-            .unwrap_err();
-        assert!(matches!(result, MetastoreError::IndexDoesNotExist { .. }));
+        // List all splits on an index
+        {
+            metastore
+                .create_index(index_metadata.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .stage_split(index_id, split_metadata_1.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .stage_split(index_id, split_metadata_2.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .stage_split(index_id, split_metadata_3.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .stage_split(index_id, split_metadata_4.clone())
+                .await
+                .unwrap();
+
+            metastore
+                .stage_split(index_id, split_metadata_5.clone())
+                .await
+                .unwrap();
+
+            let time_range_opt = Some(Range {
+                start: 0i64,
+                end: 99i64,
+            });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, time_range_opt, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), true);
+            assert_eq!(split_ids.contains("list-splits-two"), false);
+            assert_eq!(split_ids.contains("list-splits-three"), false);
+            assert_eq!(split_ids.contains("list-splits-four"), false);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let time_range_opt = Some(Range {
+                start: 200,
+                end: i64::MAX,
+            });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, time_range_opt, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), false);
+            assert_eq!(split_ids.contains("list-splits-two"), false);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), true);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let time_range_opt = Some(Range {
+                start: i64::MIN,
+                end: 200,
+            });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, time_range_opt, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), true);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), false);
+            assert_eq!(split_ids.contains("list-splits-four"), false);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range { start: 0, end: 100 });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), true);
+            assert_eq!(split_ids.contains("list-splits-two"), false);
+            assert_eq!(split_ids.contains("list-splits-three"), false);
+            assert_eq!(split_ids.contains("list-splits-four"), false);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range { start: 0, end: 101 });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), true);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), false);
+            assert_eq!(split_ids.contains("list-splits-four"), false);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range { start: 0, end: 199 });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), true);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), false);
+            assert_eq!(split_ids.contains("list-splits-four"), false);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range { start: 0, end: 200 });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), true);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), false);
+            assert_eq!(split_ids.contains("list-splits-four"), false);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range { start: 0, end: 201 });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), true);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), false);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range { start: 0, end: 299 });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), true);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), false);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range { start: 0, end: 300 });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), true);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), false);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range { start: 0, end: 301 });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), true);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), true);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range {
+                start: 301,
+                end: 400,
+            });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), false);
+            assert_eq!(split_ids.contains("list-splits-two"), false);
+            assert_eq!(split_ids.contains("list-splits-three"), false);
+            assert_eq!(split_ids.contains("list-splits-four"), true);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range {
+                start: 300,
+                end: 400,
+            });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), false);
+            assert_eq!(split_ids.contains("list-splits-two"), false);
+            assert_eq!(split_ids.contains("list-splits-three"), false);
+            assert_eq!(split_ids.contains("list-splits-four"), true);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range {
+                start: 299,
+                end: 400,
+            });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), false);
+            assert_eq!(split_ids.contains("list-splits-two"), false);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), true);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range {
+                start: 201,
+                end: 400,
+            });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), false);
+            assert_eq!(split_ids.contains("list-splits-two"), false);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), true);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range {
+                start: 200,
+                end: 400,
+            });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), false);
+            assert_eq!(split_ids.contains("list-splits-two"), false);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), true);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range {
+                start: 199,
+                end: 400,
+            });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), false);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), true);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range {
+                start: 101,
+                end: 400,
+            });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), false);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), true);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range {
+                start: 101,
+                end: 400,
+            });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), false);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), true);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range {
+                start: 100,
+                end: 400,
+            });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), false);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), true);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range {
+                start: 99,
+                end: 400,
+            });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), true);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), true);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = Some(Range {
+                start: 1000,
+                end: 1100,
+            });
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), false);
+            assert_eq!(split_ids.contains("list-splits-two"), false);
+            assert_eq!(split_ids.contains("list-splits-three"), false);
+            assert_eq!(split_ids.contains("list-splits-four"), false);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = None;
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &[])
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|metadata| metadata.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), true);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), true);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            let range = None;
+            let tags = vec!["bar".to_string(), "baz".to_string()];
+            let splits = metastore
+                .list_splits(index_id, SplitState::Staged, range, &tags)
+                .await
+                .unwrap();
+            let split_ids: HashSet<String> = splits
+                .into_iter()
+                .map(|meta| meta.split_metadata.split_id)
+                .collect();
+            assert_eq!(split_ids.contains("list-splits-one"), true);
+            assert_eq!(split_ids.contains("list-splits-two"), true);
+            assert_eq!(split_ids.contains("list-splits-three"), true);
+            assert_eq!(split_ids.contains("list-splits-four"), false);
+            assert_eq!(split_ids.contains("list-splits-five"), true);
+
+            cleanup_index(&metastore, index_id).await;
+        }
     }
 
     // List all splits on an index
@@ -1917,12 +2469,14 @@ macro_rules! metastore_test_suite {
 
             #[tokio::test]
             async fn test_metastore_mark_splits_as_deleted() {
-                crate::tests::test_metastore_mark_splits_as_deleted::<$metastore_type>().await;
+                crate::tests::test_suite::test_metastore_mark_splits_as_deleted::<$metastore_type>(
+                )
+                .await;
             }
 
             #[tokio::test]
             async fn test_metastore_delete_splits() {
-                crate::tests::test_metastore_delete_splits::<$metastore_type>().await;
+                crate::tests::test_suite::test_metastore_delete_splits::<$metastore_type>().await;
             }
 
             // #[tokio::test]
@@ -1930,20 +2484,17 @@ macro_rules! metastore_test_suite {
             //     crate::tests::test_metastore_list_all_splits::<$metastore_type>().await;
             // }
 
-            // #[tokio::test]
-            // async fn test_metastore_list_splits() {
-            //     crate::tests::test_metastore_list_splits::<$metastore_type>().await;
-            // }
+            #[tokio::test]
+            async fn test_metastore_list_splits() {
+                crate::tests::test_suite::test_metastore_list_splits::<$metastore_type>().await;
+            }
 
-            // #[tokio::test]
-            // async fn test_metastore_split_update_timestamp() {
-            //     crate::tests::test_metastore_split_update_timestamp::<$metastore_type>().await;
-            // }
-
-            // #[tokio::test]
-            // async fn test_metastore_storage_failing() {
-            //     crate::tests::test_metastore_split_update_timestamp::<$metastore_type>().await;
-            // }
+            #[tokio::test]
+            async fn test_metastore_split_update_timestamp() {
+                crate::tests::test_suite::test_metastore_split_update_timestamp::<$metastore_type>(
+                )
+                .await;
+            }
         }
     };
 }

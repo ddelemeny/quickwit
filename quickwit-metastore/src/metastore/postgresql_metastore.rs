@@ -28,7 +28,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use diesel::debug_query;
 use diesel::pg::Pg;
-use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
+use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::result::DatabaseErrorKind;
 use diesel::result::Error::DatabaseError;
 use diesel::{
@@ -57,6 +57,7 @@ const CONNECTION_TIMEOUT: u64 = 10;
 const MAX_CONNECTION_RETRY_COUNT: u32 = 10;
 const CONNECTION_STATUS_CHECK_INTERVAL: u64 = 2;
 
+/// Establishes a connection to the given database URI.
 fn establish_connection(
     database_uri: &str,
 ) -> anyhow::Result<Pool<ConnectionManager<PgConnection>>> {
@@ -92,6 +93,8 @@ fn establish_connection(
     }
 }
 
+/// Initialize the database.
+/// The sql used for the initialization is stored in quickwit-metastore/migrations directory.
 fn initialize_db(pool: &Pool<ConnectionManager<PgConnection>>) -> anyhow::Result<()> {
     let db_conn = pool.get()?;
     let mut migrations_log_buffer = Vec::new();
@@ -117,6 +120,7 @@ fn initialize_db(pool: &Pool<ConnectionManager<PgConnection>>) -> anyhow::Result
     Ok(())
 }
 
+/// Get the PostgreSQL-based metastore. The metastore is created as a singleton.
 pub async fn get_postgresql_metastore(database_uri: &str) -> &'static PostgresqlMetastore {
     static POSTGRESQL_METASTORE: OnceCell<PostgresqlMetastore> = OnceCell::const_new();
     POSTGRESQL_METASTORE
@@ -419,14 +423,17 @@ impl Metastore for PostgresqlMetastore {
             });
         }
 
+        // A variable that notifies the split in which the error occurred.
         let mut error_split_id = "";
+
         conn.transaction::<_, diesel::result::Error, _>(|| {
-            // Update index metadata.
+            // Update the index checkpoint.
             diesel::update(schema::indexes::dsl::indexes.find(index_id))
                 .set(schema::indexes::dsl::checkpoint.eq(new_checkpoint))
                 .execute(&*conn)?;
 
-            // Updatre split metadata.
+            // Updates the state of the split to published,
+            // then get a list of splits that have been successfully updated.
             let updated_splits: Vec<model::Split> = diesel::update(
                 schema::splits::dsl::splits.filter(
                     schema::splits::dsl::index_id
@@ -440,7 +447,7 @@ impl Metastore for PostgresqlMetastore {
             ))
             .get_results(&*conn)?;
 
-            // Splits that are not updated are treated as errors because they are non-existent splits.
+            // Find out the ID of the update error and return an error if there is one.
             if updated_splits.len() < split_ids.len() {
                 for split_id in split_ids.iter() {
                     if !updated_splits
@@ -635,16 +642,18 @@ impl Metastore for PostgresqlMetastore {
             });
         }
 
-        let statement = if let Some(time_range) = time_range_opt {
+        let list_splits_statement = if let Some(time_range) = time_range_opt {
             schema::splits::dsl::splits
                 .filter(
                     schema::splits::dsl::index_id
                         .eq(index_id)
                         .and(schema::splits::dsl::split_state.eq(state as i32))
                         .and(
-                            schema::splits::dsl::end_time_range
-                                .ge(time_range.start)
-                                .or(schema::splits::dsl::start_time_range.lt(time_range.end)),
+                            schema::splits::dsl::end_time_range.is_null().or(
+                                schema::splits::dsl::end_time_range
+                                    .ge(time_range.start)
+                                    .and(schema::splits::dsl::start_time_range.lt(time_range.end)),
+                            ),
                         ),
                 )
                 .into_boxed()
@@ -657,9 +666,9 @@ impl Metastore for PostgresqlMetastore {
                 )
                 .into_boxed()
         };
-
+        debug!(sql=%debug_query::<Pg, _>(&list_splits_statement).to_string());
         let model_splits: Vec<model::Split> =
-            statement
+            list_splits_statement
                 .load(&conn)
                 .map_err(|err| MetastoreError::InternalError {
                     message: "Failed to select splits".to_string(),
@@ -998,7 +1007,7 @@ impl MetastoreFactory for PostgresqlMetastoreFactory {
 
 #[cfg(test)]
 #[async_trait]
-impl crate::tests::DefaultForTest for PostgresqlMetastore {
+impl crate::tests::test_suite::DefaultForTest for PostgresqlMetastore {
     async fn default_for_test() -> Self {
         use std::env;
 

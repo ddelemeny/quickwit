@@ -519,7 +519,7 @@ impl MetastoreFactory for SingleFileMetastoreFactory {
 
 #[cfg(test)]
 #[async_trait]
-impl crate::tests::DefaultForTest for SingleFileMetastore {
+impl crate::tests::test_suite::DefaultForTest for SingleFileMetastore {
     async fn default_for_test() -> Self {
         use quickwit_storage::RamStorage;
         SingleFileMetastore::new(Arc::new(RamStorage::default()))
@@ -530,12 +530,22 @@ metastore_test_suite!(crate::SingleFileMetastore);
 
 #[cfg(test)]
 mod tests {
+    use std::ops::RangeInclusive;
+    use std::path::Path;
     use std::sync::Arc;
 
-    use quickwit_index_config::AllFlattenIndexConfig;
+    use chrono::Utc;
 
-    use crate::checkpoint::Checkpoint;
-    use crate::{IndexMetadata, Metastore, MetastoreError, SingleFileMetastore};
+    use quickwit_index_config::AllFlattenIndexConfig;
+    use quickwit_storage::MockStorage;
+    use quickwit_storage::StorageErrorKind;
+
+    use crate::checkpoint::{Checkpoint, CheckpointDelta};
+    use crate::SingleFileMetastore;
+    use crate::{
+        IndexMetadata, Metastore, MetastoreError, SplitMetadata, SplitMetadataAndFooterOffsets,
+        SplitState,
+    };
 
     #[tokio::test]
     async fn test_single_file_metastore_index_exists() {
@@ -614,5 +624,79 @@ mod tests {
                 MetastoreError::IndexDoesNotExist { .. }
             ));
         }
+    }
+
+    #[tokio::test]
+    async fn test_single_file_metastore_storage_failing() {
+        // The single file metastore should not update its internal state if the storage fails.
+        let mut mock_storage = MockStorage::default();
+
+        let current_timestamp = Utc::now().timestamp();
+
+        mock_storage // remove this if we end up changing the semantics of create.
+            .expect_exists()
+            .returning(|_| Ok(false));
+        mock_storage.expect_put().times(2).returning(|uri, _| {
+            assert_eq!(uri, Path::new("my-index/quickwit.json"));
+            Ok(())
+        });
+        mock_storage.expect_put().times(1).returning(|_uri, _| {
+            Err(StorageErrorKind::Io
+                .with_error(anyhow::anyhow!("Oops. Some network problem maybe?")))
+        });
+
+        let metastore = SingleFileMetastore::new(Arc::new(mock_storage));
+
+        let index_id = "my-index";
+        let split_id = "split-one";
+        let split_metadata = SplitMetadataAndFooterOffsets {
+            footer_offsets: 1000..2000,
+            split_metadata: SplitMetadata {
+                split_id: split_id.to_string(),
+                split_state: SplitState::Staged,
+                num_records: 1,
+                size_in_bytes: 2,
+                time_range: Some(RangeInclusive::new(0, 99)),
+                generation: 3,
+                update_timestamp: current_timestamp,
+                ..Default::default()
+            },
+        };
+
+        let index_metadata = IndexMetadata {
+            index_id: index_id.to_string(),
+            index_uri: "ram://indexes/my-index".to_string(),
+            index_config: Arc::new(quickwit_index_config::default_config_for_tests()),
+            checkpoint: Checkpoint::default(),
+        };
+
+        // create index
+        metastore.create_index(index_metadata).await.unwrap();
+
+        // stage split
+        metastore
+            .stage_split(index_id, split_metadata)
+            .await
+            .unwrap();
+
+        // publish split fails
+        let err = metastore
+            .publish_splits(index_id, &[split_id], CheckpointDelta::default())
+            .await;
+        assert!(err.is_err());
+
+        // empty
+        let split = metastore
+            .list_splits(index_id, SplitState::Published, None, &[])
+            .await
+            .unwrap();
+        assert!(split.is_empty());
+
+        // not empty
+        let split = metastore
+            .list_splits(index_id, SplitState::Staged, None, &[])
+            .await
+            .unwrap();
+        assert!(!split.is_empty());
     }
 }
