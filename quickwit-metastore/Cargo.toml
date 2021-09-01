@@ -44,3 +44,4 @@ quickwit-index-config = { version = "0.1.0", path = "../quickwit-index-config", 
 
 [features]
 testsuite = ["mockall", "tempfile"]
+ci-test = []

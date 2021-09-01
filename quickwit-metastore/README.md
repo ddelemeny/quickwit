@@ -11,33 +11,19 @@ Start PostgreSQL on Docker.
 
 ```
 $ cd quickwit-metastore
-$ docker-compose up
-```
-
-```
-$ docker-compose rm -f
+$ docker-compose up -d
 ```
 
 Setup diesel.rs
 
-Create .env file.
-
 ```
-echo DATABASE_URL=postgres://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE} > .env
-```
-
-```
+$ echo DATABASE_URL=postgres://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE} > .env
 $ diesel setup
-```
-
-`quickwit-metastore/migrations` and `quickwit-metastore/diesel.toml` will be created.
-
-```
 $ diesel migration generate create_indexes
 $ diesel migration generate create_splits
 ```
 
-Update the `.sql` file in the generated `migrations` directory.
+Update the `.sql` file in the generated `migrations` directory. 
 
 ```
 $ diesel migration run
@@ -49,5 +35,5 @@ $ diesel migration run
 Unit testing
 
 ```
-$ cargo test -- --test-threads=1
+$ cargo test --all-features
 ```

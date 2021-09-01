@@ -1020,4 +1020,4 @@ impl crate::tests::test_suite::DefaultForTest for PostgresqlMetastore {
     }
 }
 
-metastore_test_suite!(crate::PostgresqlMetastore);
+metastore_test_suite_for_database!(crate::PostgresqlMetastore);

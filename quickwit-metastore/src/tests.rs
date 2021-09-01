@@ -2498,3 +2498,80 @@ macro_rules! metastore_test_suite {
         }
     };
 }
+
+macro_rules! metastore_test_suite_for_database {
+    ($metastore_type:ty) => {
+        #[cfg(test)]
+        mod common_tests {
+            #[tokio::test]
+            #[cfg_attr(not(feature = "ci-test"), ignore)]
+            async fn test_metastore_create_index() {
+                crate::tests::test_suite::test_metastore_create_index::<$metastore_type>().await;
+            }
+
+            #[tokio::test]
+            #[cfg_attr(not(feature = "ci-test"), ignore)]
+            async fn test_metastore_delete_index() {
+                crate::tests::test_suite::test_metastore_delete_index::<$metastore_type>().await;
+            }
+
+            #[tokio::test]
+            #[cfg_attr(not(feature = "ci-test"), ignore)]
+            async fn test_metastore_index_metadata() {
+                crate::tests::test_suite::test_metastore_index_metadata::<$metastore_type>().await;
+            }
+
+            #[tokio::test]
+            #[cfg_attr(not(feature = "ci-test"), ignore)]
+            async fn test_metastore_stage_split() {
+                crate::tests::test_suite::test_metastore_stage_split::<$metastore_type>().await;
+            }
+
+            #[tokio::test]
+            #[cfg_attr(not(feature = "ci-test"), ignore)]
+            async fn test_metastore_publish_splits() {
+                crate::tests::test_suite::test_metastore_publish_splits::<$metastore_type>().await;
+            }
+
+            #[tokio::test]
+            #[cfg_attr(not(feature = "ci-test"), ignore)]
+            async fn test_metastore_replace_splits() {
+                crate::tests::test_suite::test_metastore_replace_splits::<$metastore_type>().await;
+            }
+
+            #[tokio::test]
+            #[cfg_attr(not(feature = "ci-test"), ignore)]
+            async fn test_metastore_mark_splits_as_deleted() {
+                crate::tests::test_suite::test_metastore_mark_splits_as_deleted::<$metastore_type>(
+                )
+                .await;
+            }
+
+            #[tokio::test]
+            #[cfg_attr(not(feature = "ci-test"), ignore)]
+            async fn test_metastore_delete_splits() {
+                crate::tests::test_suite::test_metastore_delete_splits::<$metastore_type>().await;
+            }
+
+            #[tokio::test]
+            #[cfg_attr(not(feature = "ci-test"), ignore)]
+            async fn test_metastore_list_all_splits() {
+                crate::tests::test_suite::test_metastore_list_all_splits::<$metastore_type>().await;
+            }
+
+            #[tokio::test]
+            #[cfg_attr(not(feature = "ci-test"), ignore)]
+            async fn test_metastore_list_splits() {
+                crate::tests::test_suite::test_metastore_list_splits::<$metastore_type>().await;
+            }
+
+            #[tokio::test]
+            #[cfg_attr(not(feature = "ci-test"), ignore)]
+            async fn test_metastore_split_update_timestamp() {
+                crate::tests::test_suite::test_metastore_split_update_timestamp::<$metastore_type>(
+                )
+                .await;
+            }
+        }
+    };
+}
