@@ -39,7 +39,7 @@ use dotenv::dotenv;
 use tokio::sync::OnceCell;
 use tracing::{debug, error, info};
 
-use crate::metastore::{Checkpoint, CheckpointDelta};
+use crate::metastore::CheckpointDelta;
 use crate::postgresql::{model, schema};
 use crate::IndexMetadata;
 use crate::Metastore;
@@ -234,24 +234,67 @@ impl PostgresqlMetastore {
         index_id: &str,
         split_ids: &[&str],
     ) -> QueryResult<Vec<String>> {
-        let update_splits_statement = diesel::update(
-            schema::splits::dsl::splits.filter(
-                schema::splits::dsl::index_id
-                    .eq(index_id)
-                    .and(schema::splits::dsl::split_id.eq_any(split_ids)),
-            ),
-        )
-        .set((
-            schema::splits::dsl::split_state.eq(SplitState::Published.to_string()),
-            schema::splits::dsl::update_timestamp.eq(Utc::now().timestamp()),
-        ));
-        debug!(sql=%debug_query::<Pg, _>(&update_splits_statement).to_string());
-        let updated_splits: Vec<model::Split> = update_splits_statement.get_results(&*conn)?;
+        // Select splits to publish.
+        let select_splits_statement = schema::splits::dsl::splits.filter(
+            schema::splits::dsl::index_id
+                .eq(index_id)
+                .and(schema::splits::dsl::split_id.eq_any(split_ids)),
+        );
+        debug!(sql=%debug_query::<Pg, _>(&select_splits_statement).to_string());
+        let model_splits: Vec<model::Split> = select_splits_statement.get_results(conn)?;
 
-        let succeeded_split_ids: Vec<String> = updated_splits
-            .iter()
-            .map(|split| split.split_id.clone())
-            .collect();
+        let now_timestamp = Utc::now().timestamp();
+        let mut succeeded_split_ids = Vec::new();
+        for model_split in model_splits {
+            // Deserialize the target split metadata.
+            let mut split_metadata_and_footer_offsets =
+                match model_split.make_split_metadata_and_footer_offsets() {
+                    Ok(split_metadata_and_footer_offsets) => split_metadata_and_footer_offsets,
+                    Err(err) => {
+                        error!(
+                            "Failed to deserialize JSON to SplitMetadataAndFooterOffsets {:?}",
+                            err
+                        );
+                        continue;
+                    }
+                };
+
+            // Update its split_state and update_timestamp.
+            split_metadata_and_footer_offsets.split_metadata.split_state = SplitState::Published;
+            split_metadata_and_footer_offsets
+                .split_metadata
+                .update_timestamp = now_timestamp;
+
+            // Serialize to JSON.
+            let split_metadata_and_footer_offsets_json =
+                match serde_json::to_string(&split_metadata_and_footer_offsets) {
+                    Ok(json_str) => json_str,
+                    Err(err) => {
+                        error!(
+                            "Failed to serialize from JSON to SplitMetadataAndFooterOffsets {:?}",
+                            err
+                        );
+                        continue;
+                    }
+                };
+
+            // Update database.
+            let update_splits_statement = diesel::update(
+                schema::splits::dsl::splits.filter(
+                    schema::splits::dsl::index_id
+                        .eq(index_id)
+                        .and(schema::splits::dsl::split_id.eq(model_split.split_id)),
+                ),
+            )
+            .set((
+                schema::splits::dsl::split_state.eq(SplitState::Published.to_string()),
+                schema::splits::dsl::json.eq(split_metadata_and_footer_offsets_json),
+            ));
+            debug!(sql=%debug_query::<Pg, _>(&update_splits_statement).to_string());
+            let updated_split: model::Split = update_splits_statement.get_result(&*conn)?;
+
+            succeeded_split_ids.push(updated_split.split_id);
+        }
 
         Ok(succeeded_split_ids)
     }
@@ -264,24 +307,68 @@ impl PostgresqlMetastore {
         index_id: &str,
         split_ids: &[&str],
     ) -> QueryResult<Vec<String>> {
-        let update_splits_statement = diesel::update(
-            schema::splits::dsl::splits.filter(
-                schema::splits::dsl::index_id
-                    .eq(index_id)
-                    .and(schema::splits::dsl::split_id.eq_any(split_ids)),
-            ),
-        )
-        .set((
-            schema::splits::dsl::split_state.eq(SplitState::ScheduledForDeletion.to_string()),
-            schema::splits::dsl::update_timestamp.eq(Utc::now().timestamp()),
-        ));
-        debug!(sql=%debug_query::<Pg, _>(&update_splits_statement).to_string());
-        let updated_splits: Vec<model::Split> = update_splits_statement.get_results(&*conn)?;
+        // Select splits to matk as deleted.
+        let select_splits_statement = schema::splits::dsl::splits.filter(
+            schema::splits::dsl::index_id
+                .eq(index_id)
+                .and(schema::splits::dsl::split_id.eq_any(split_ids)),
+        );
+        debug!(sql=%debug_query::<Pg, _>(&select_splits_statement).to_string());
+        let model_splits: Vec<model::Split> = select_splits_statement.get_results(conn)?;
 
-        let succeeded_split_ids: Vec<String> = updated_splits
-            .iter()
-            .map(|split| split.split_id.clone())
-            .collect();
+        let now_timestamp = Utc::now().timestamp();
+        let mut succeeded_split_ids = Vec::new();
+        for model_split in model_splits {
+            // Deserialize the target split metadata.
+            let mut split_metadata_and_footer_offsets =
+                match model_split.make_split_metadata_and_footer_offsets() {
+                    Ok(split_metadata_and_footer_offsets) => split_metadata_and_footer_offsets,
+                    Err(err) => {
+                        error!(
+                            "Failed to deserialize JSON to SplitMetadataAndFooterOffsets {:?}",
+                            err
+                        );
+                        continue;
+                    }
+                };
+
+            // Update its split_state and update_timestamp.
+            split_metadata_and_footer_offsets.split_metadata.split_state =
+                SplitState::ScheduledForDeletion;
+            split_metadata_and_footer_offsets
+                .split_metadata
+                .update_timestamp = now_timestamp;
+
+            // Serialize to JSON.
+            let split_metadata_and_footer_offsets_json =
+                match serde_json::to_string(&split_metadata_and_footer_offsets) {
+                    Ok(json_str) => json_str,
+                    Err(err) => {
+                        error!(
+                            "Failed to serialize from JSON to SplitMetadataAndFooterOffsets {:?}",
+                            err
+                        );
+                        continue;
+                    }
+                };
+
+            // Update database.
+            let update_splits_statement = diesel::update(
+                schema::splits::dsl::splits.filter(
+                    schema::splits::dsl::index_id
+                        .eq(index_id)
+                        .and(schema::splits::dsl::split_id.eq(model_split.split_id)),
+                ),
+            )
+            .set((
+                schema::splits::dsl::split_state.eq(SplitState::ScheduledForDeletion.to_string()),
+                schema::splits::dsl::json.eq(split_metadata_and_footer_offsets_json),
+            ));
+            debug!(sql=%debug_query::<Pg, _>(&update_splits_statement).to_string());
+            let updated_split: model::Split = update_splits_statement.get_result(&*conn)?;
+
+            succeeded_split_ids.push(updated_split.split_id);
+        }
 
         Ok(succeeded_split_ids)
     }
@@ -290,17 +377,8 @@ impl PostgresqlMetastore {
 #[async_trait]
 impl Metastore for PostgresqlMetastore {
     async fn create_index(&self, index_metadata: IndexMetadata) -> MetastoreResult<()> {
-        // Serialize the index_config to fit the database model.
-        let index_config_str =
-            serde_json::to_string(&index_metadata.index_config).map_err(|err| {
-                MetastoreError::InternalError {
-                    message: "Failed to serialize index config".to_string(),
-                    cause: anyhow::anyhow!(err),
-                }
-            })?;
-
-        // Serialize the checkpoint to fit the database model.
-        let checkpoint_str = serde_json::to_string(&index_metadata.checkpoint).map_err(|err| {
+        // Serialize the index metadata to fit the database model.
+        let index_metadata_json = serde_json::to_string(&index_metadata).map_err(|err| {
             MetastoreError::InternalError {
                 message: "Failed to serialize checkpoint".to_string(),
                 cause: anyhow::anyhow!(err),
@@ -309,9 +387,7 @@ impl Metastore for PostgresqlMetastore {
 
         let model_index = model::Index {
             index_id: index_metadata.index_id.clone(),
-            index_uri: index_metadata.index_uri.clone(),
-            index_config: index_config_str,
-            checkpoint: checkpoint_str,
+            json: index_metadata_json,
         };
 
         let conn = self
@@ -387,15 +463,11 @@ impl Metastore for PostgresqlMetastore {
     async fn stage_split(
         &self,
         index_id: &str,
-        metadata: SplitMetadataAndFooterOffsets,
+        mut metadata: SplitMetadataAndFooterOffsets,
     ) -> MetastoreResult<()> {
-        // Serialize the tags to fit the database model.
-        let tags = serde_json::to_string(&metadata.split_metadata.tags).map_err(|err| {
-            MetastoreError::InternalError {
-                message: "Failed to serialize tags".to_string(),
-                cause: anyhow::anyhow!(err),
-            }
-        })?;
+        // Modify split state to Staged.
+        metadata.split_metadata.split_state = SplitState::Staged;
+        metadata.split_metadata.update_timestamp = Utc::now().timestamp();
 
         // Fit the time_range to the database model.
         let start_time_range = metadata
@@ -409,6 +481,21 @@ impl Metastore for PostgresqlMetastore {
             .clone()
             .map(|range| *range.end());
 
+        // Serialize the tags to fit the database model.
+        let tags = serde_json::to_string(&metadata.split_metadata.tags).map_err(|err| {
+            MetastoreError::InternalError {
+                message: "Failed to serialize tags".to_string(),
+                cause: anyhow::anyhow!(err),
+            }
+        })?;
+
+        // Serialize the split metadata and footer offsets to fit the database model.
+        let split_metadata_and_footer_offsets_json =
+            serde_json::to_string(&metadata).map_err(|err| MetastoreError::InternalError {
+                message: "Failed to serialize split metadata and footer offsets".to_string(),
+                cause: anyhow::anyhow!(err),
+            })?;
+
         let conn = self
             .connection_pool
             .get()
@@ -419,16 +506,11 @@ impl Metastore for PostgresqlMetastore {
 
         let model_split = model::Split {
             split_id: metadata.split_metadata.split_id,
-            split_state: SplitState::Staged.to_string(),
-            num_records: metadata.split_metadata.num_records as i64,
-            size_in_bytes: metadata.split_metadata.size_in_bytes as i64,
+            split_state: metadata.split_metadata.split_state.to_string(),
             start_time_range,
             end_time_range,
-            generation: metadata.split_metadata.generation as i64,
-            update_timestamp: Utc::now().timestamp(),
             tags,
-            start_footer_offset: metadata.footer_offsets.start as i64,
-            end_footer_offset: metadata.footer_offsets.end as i64,
+            json: split_metadata_and_footer_offsets_json,
             index_id: index_id.to_string(),
         };
 
@@ -491,23 +573,26 @@ impl Metastore for PostgresqlMetastore {
             })?;
 
         // Deserialize the checkpoint from the database model.
-        let mut checkpoint: Checkpoint =
-            serde_json::from_str(&model_index.checkpoint).map_err(|err| {
-                MetastoreError::InternalError {
-                    message: "Failed to deserialize checkpoint".to_string(),
+        let mut index_metadata =
+            model_index
+                .make_index_metadata()
+                .map_err(|err| MetastoreError::InternalError {
+                    message: "Failed to deserialize index metadata".to_string(),
                     cause: anyhow::anyhow!(err),
-                }
-            })?;
+                })?;
 
         // Apply checkpoint_delta
-        checkpoint.try_apply_delta(checkpoint_delta)?;
+        index_metadata
+            .checkpoint
+            .try_apply_delta(checkpoint_delta)?;
 
         // Serialize the checkpoint to fit the database model.
-        let new_checkpoint =
-            serde_json::to_string(&checkpoint).map_err(|err| MetastoreError::InternalError {
-                message: "Failed to serialize checkpoint".to_string(),
+        let index_metadata_json = serde_json::to_string(&index_metadata).map_err(|err| {
+            MetastoreError::InternalError {
+                message: "Failed to serialize index metadata".to_string(),
                 cause: anyhow::anyhow!(err),
-            })?;
+            }
+        })?;
 
         // Check for the inclusion of non-publishable split IDs.
         // Except for SplitState::Staged and SplitState::Published, you cannot publish.
@@ -530,7 +615,7 @@ impl Metastore for PostgresqlMetastore {
             // Update the index checkpoint.
             let update_index_statement =
                 diesel::update(schema::indexes::dsl::indexes.find(index_id))
-                    .set(schema::indexes::dsl::checkpoint.eq(new_checkpoint));
+                    .set(schema::indexes::dsl::json.eq(index_metadata_json));
             debug!(sql=%debug_query::<Pg, _>(&update_index_statement).to_string());
             update_index_statement.execute(&*conn)?;
 
