@@ -10,7 +10,7 @@ table! {
 table! {
     splits (split_id) {
         split_id -> Varchar,
-        split_state -> Int4,
+        split_state -> Varchar,
         num_records -> Int8,
         size_in_bytes -> Int8,
         start_time_range -> Nullable<Int8>,
@@ -26,4 +26,7 @@ table! {
 
 joinable!(splits -> indexes (index_id));
 
-allow_tables_to_appear_in_same_query!(indexes, splits,);
+allow_tables_to_appear_in_same_query!(
+    indexes,
+    splits,
+);

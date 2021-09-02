@@ -21,9 +21,8 @@
 */
 
 use std::ops::{Range, RangeInclusive};
+use std::str::FromStr;
 use std::sync::Arc;
-
-use num::FromPrimitive;
 
 use quickwit_index_config::{DefaultIndexConfigBuilder, IndexConfig};
 
@@ -88,7 +87,7 @@ pub struct Split {
     /// Split ID.
     pub split_id: String,
     /// The state of the split. This is the only mutable attribute of the split.
-    pub split_state: i32,
+    pub split_state: String,
     /// Number of records (or documents) in the split.
     pub num_records: i64,
     /// Sum of the size (in bytes) of the documents in this split.
@@ -124,7 +123,7 @@ impl Split {
 
     /// Get split state from split_state in database model.
     pub fn get_split_state(&self) -> Option<SplitState> {
-        SplitState::from_i64(self.split_state as i64)
+        SplitState::from_str(&self.split_state).ok()
     }
 
     /// Get tags from serialized tags.

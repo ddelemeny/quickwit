@@ -108,10 +108,12 @@ fn initialize_db(pool: &Pool<ConnectionManager<PgConnection>>) -> anyhow::Result
                 migration_output = migrations_log.as_ref(),
                 "Database migrations succeeded"
             );
+            println!("ok");
         }
         Err(ref migration_err) => {
             let migrations_log = String::from_utf8_lossy(&migrations_log_buffer);
             error!(err=%migration_err, migration_output=migrations_log.as_ref(), "Database migrations failed");
+            println!("ng");
         }
     }
 
@@ -193,7 +195,8 @@ impl PostgresqlMetastore {
         Ok(index_exists)
     }
 
-    ///
+    /// Get non-publishable splits.
+    /// Returns split ID list.
     fn get_non_publishable_splits(
         &self,
         conn: &PooledConnection<ConnectionManager<PgConnection>>,
@@ -204,8 +207,10 @@ impl PostgresqlMetastore {
             schema::splits::dsl::index_id.eq(index_id).and(
                 schema::splits::dsl::split_id.eq_any(split_ids).and(
                     schema::splits::dsl::split_state
-                        .ne(SplitState::Staged as i32)
-                        .and(schema::splits::dsl::split_state.ne(SplitState::Published as i32)),
+                        .ne(SplitState::Staged.to_string())
+                        .and(
+                            schema::splits::dsl::split_state.ne(SplitState::Published.to_string()),
+                        ),
                 ),
             ),
         );
@@ -237,7 +242,7 @@ impl PostgresqlMetastore {
             ),
         )
         .set((
-            schema::splits::dsl::split_state.eq(SplitState::Published as i32),
+            schema::splits::dsl::split_state.eq(SplitState::Published.to_string()),
             schema::splits::dsl::update_timestamp.eq(Utc::now().timestamp()),
         ));
         debug!(sql=%debug_query::<Pg, _>(&update_splits_statement).to_string());
@@ -267,7 +272,7 @@ impl PostgresqlMetastore {
             ),
         )
         .set((
-            schema::splits::dsl::split_state.eq(SplitState::ScheduledForDeletion as i32),
+            schema::splits::dsl::split_state.eq(SplitState::ScheduledForDeletion.to_string()),
             schema::splits::dsl::update_timestamp.eq(Utc::now().timestamp()),
         ));
         debug!(sql=%debug_query::<Pg, _>(&update_splits_statement).to_string());
@@ -414,7 +419,7 @@ impl Metastore for PostgresqlMetastore {
 
         let model_split = model::Split {
             split_id: metadata.split_metadata.split_id,
-            split_state: SplitState::Staged as i32,
+            split_state: SplitState::Staged.to_string(),
             num_records: metadata.split_metadata.num_records as i64,
             size_in_bytes: metadata.split_metadata.size_in_bytes as i64,
             start_time_range,
@@ -442,12 +447,12 @@ impl Metastore for PostgresqlMetastore {
                     index_id: index_id.to_string(),
                 },
                 _ => MetastoreError::InternalError {
-                    message: "Failed to create index".to_string(),
+                    message: "Failed to stage split".to_string(),
                     cause: anyhow::anyhow!(err_info.message().to_string()),
                 },
             },
             _ => MetastoreError::InternalError {
-                message: "Failed to create index".to_string(),
+                message: "Failed to stage split".to_string(),
                 cause: anyhow::anyhow!(err),
             },
         })?;
@@ -689,7 +694,7 @@ impl Metastore for PostgresqlMetastore {
                 .filter(
                     schema::splits::dsl::index_id
                         .eq(index_id)
-                        .and(schema::splits::dsl::split_state.eq(state as i32))
+                        .and(schema::splits::dsl::split_state.eq(state.to_string()))
                         .and(
                             schema::splits::dsl::end_time_range.is_null().or(
                                 schema::splits::dsl::end_time_range
@@ -704,7 +709,7 @@ impl Metastore for PostgresqlMetastore {
                 .filter(
                     schema::splits::dsl::index_id
                         .eq(index_id)
-                        .and(schema::splits::dsl::split_state.eq(state as i32)),
+                        .and(schema::splits::dsl::split_state.eq(state.to_string())),
                 )
                 .into_boxed()
         };
@@ -898,10 +903,10 @@ impl Metastore for PostgresqlMetastore {
             schema::splits::dsl::index_id.eq(index_id).and(
                 schema::splits::dsl::split_id.eq_any(split_ids).and(
                     schema::splits::dsl::split_state
-                        .ne(SplitState::Staged as i32)
+                        .ne(SplitState::Staged.to_string())
                         .and(
                             schema::splits::dsl::split_state
-                                .ne(SplitState::ScheduledForDeletion as i32),
+                                .ne(SplitState::ScheduledForDeletion.to_string()),
                         ),
                 ),
             ),
@@ -932,8 +937,9 @@ impl Metastore for PostgresqlMetastore {
                     schema::splits::dsl::index_id.eq(index_id).and(
                         schema::splits::dsl::split_id.eq_any(split_ids).and(
                             schema::splits::dsl::split_state
-                                .eq(SplitState::ScheduledForDeletion as i32)
-                                .or(schema::splits::dsl::split_state.eq(SplitState::Staged as i32)),
+                                .eq(SplitState::ScheduledForDeletion.to_string())
+                                .or(schema::splits::dsl::split_state
+                                    .eq(SplitState::Staged.to_string())),
                         ),
                     ),
                 ),

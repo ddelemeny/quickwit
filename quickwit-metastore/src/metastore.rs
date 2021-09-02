@@ -26,11 +26,12 @@ pub mod single_file_metastore;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ops::{Range, RangeInclusive};
+use std::str::FromStr;
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use chrono::Utc;
-use num::FromPrimitive;
+// use num::FromPrimitive;
 use quickwit_index_config::IndexConfig;
 use serde::{Deserialize, Serialize};
 
@@ -133,25 +134,23 @@ impl Default for SplitState {
     }
 }
 
-impl FromPrimitive for SplitState {
-    fn from_i64(num_split_state: i64) -> Option<SplitState> {
-        match num_split_state {
-            0 => Some(SplitState::New),
-            1 => Some(SplitState::Staged),
-            2 => Some(SplitState::Published),
-            3 => Some(SplitState::ScheduledForDeletion),
-            _ => None,
+impl FromStr for SplitState {
+    type Err = &'static str;
+
+    fn from_str(input: &str) -> Result<SplitState, Self::Err> {
+        match input {
+            "New" => Ok(SplitState::New),
+            "Staged" => Ok(SplitState::Staged),
+            "Published" => Ok(SplitState::Published),
+            "ScheduledForDeletion" => Ok(SplitState::ScheduledForDeletion),
+            _ => Err("Unknown split state"),
         }
     }
+}
 
-    fn from_u64(num_split_state: u64) -> Option<SplitState> {
-        match num_split_state {
-            0 => Some(SplitState::New),
-            1 => Some(SplitState::Staged),
-            2 => Some(SplitState::Published),
-            3 => Some(SplitState::ScheduledForDeletion),
-            _ => None,
-        }
+impl fmt::Display for SplitState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 

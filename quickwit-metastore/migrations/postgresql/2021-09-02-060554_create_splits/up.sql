@@ -1,6 +1,6 @@
 CREATE TABLE splits (
     split_id VARCHAR(50) PRIMARY KEY, 
-    split_state INTEGER NOT NULL, 
+    split_state VARCHAR(30) NOT NULL, 
     num_records BIGINT NOT NULL, 
     size_in_bytes BIGINT NOT NULL, 
     start_time_range BIGINT,
