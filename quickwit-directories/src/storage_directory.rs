@@ -34,7 +34,7 @@ use tantivy::directory::OwnedBytes;
 use tantivy::directory::{FileHandle, WatchCallback, WatchHandle, WritePtr};
 use tantivy::HasLen;
 use tantivy::{AsyncIoResult, Directory};
-use tracing::error;
+use tracing::*;
 
 use crate::caching_directory::BytesWrapper;
 
@@ -65,6 +65,7 @@ impl FileHandle for StorageDirectoryFileHandle {
         Err(unsupported_operation(&self.path))
     }
 
+    #[instrument(level = "debug", fields(path = %self.path.to_string_lossy()), skip(self, byte_range))]
     async fn read_bytes_async(&self, byte_range: Range<usize>) -> AsyncIoResult<OwnedBytes> {
         if byte_range.is_empty() {
             return Ok(OwnedBytes::empty());
