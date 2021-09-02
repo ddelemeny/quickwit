@@ -40,8 +40,7 @@ use tokio::sync::OnceCell;
 use tracing::{debug, error, info};
 
 use crate::metastore::{Checkpoint, CheckpointDelta};
-use crate::model;
-use crate::schema;
+use crate::postgresql::{model, schema};
 use crate::IndexMetadata;
 use crate::Metastore;
 use crate::MetastoreError;
@@ -51,7 +50,7 @@ use crate::MetastoreResult;
 use crate::SplitMetadataAndFooterOffsets;
 use crate::SplitState;
 
-embed_migrations!();
+embed_migrations!("migrations/postgresql");
 
 const MAX_CONNECTION_POOL_SIZE: u32 = 10;
 const CONNECTION_TIMEOUT: u64 = 10;

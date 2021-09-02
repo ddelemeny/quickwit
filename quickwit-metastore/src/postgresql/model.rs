@@ -28,7 +28,7 @@ use num::FromPrimitive;
 use quickwit_index_config::{DefaultIndexConfigBuilder, IndexConfig};
 
 use crate::checkpoint::Checkpoint;
-use crate::schema::{indexes, splits};
+use crate::postgresql::schema::{indexes, splits};
 use crate::IndexMetadata;
 use crate::SplitMetadata;
 use crate::SplitMetadataAndFooterOffsets;
