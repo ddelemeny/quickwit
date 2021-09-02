@@ -31,8 +31,8 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::transport::Channel;
 use tonic::transport::Endpoint;
 use tonic::Request;
-use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing::*;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::error::parse_grpc_error;
 use crate::SearchError;
@@ -41,11 +41,11 @@ use crate::SearchService;
 struct MetadataMap<'a>(&'a mut tonic::metadata::MetadataMap);
 
 impl<'a> Injector for MetadataMap<'a> {
-    /// Set a key and value in the MetadataMap.  Does nothing if the key or value are not valid inputs
+    /// Sets a key and value in the MetadataMap.  Does nothing if the key or value are not valid inputs
     fn set(&mut self, key: &str, value: String) {
-        if let Ok(key) = tonic::metadata::MetadataKey::from_bytes(key.as_bytes()) {
-            if let Ok(val) = tonic::metadata::MetadataValue::from_str(&value) {
-                self.0.insert(key, val);
+        if let Ok(metadata_key) = tonic::metadata::MetadataKey::from_bytes(key.as_bytes()) {
+            if let Ok(metadata_value) = tonic::metadata::MetadataValue::from_str(&value) {
+                self.0.insert(metadata_key, metadata_value);
             }
         }
     }
@@ -156,35 +156,38 @@ impl SearchServiceClient {
                 let mut grpc_client_clone = grpc_client.clone();
                 let (result_sender, result_receiver) = tokio::sync::mpsc::unbounded_channel();
                 let span = info_span!(
-                    "leaf_node_client_search_stream",
+                    "client:leaf_search_stream",
                     grpc_addr=?self.grpc_addr()
                 );
-                tokio::spawn(async move {
-                    let mut tonic_request = Request::new(request);
-                    global::get_text_map_propagator(|propagator| {
-                        propagator.inject_context(
-                            &tracing::Span::current().context(),
-                            &mut MetadataMap(tonic_request.metadata_mut()),
-                        )
-                    });
-                    let mut results_stream = grpc_client_clone
-                        .leaf_search_stream(tonic_request)
-                        .await
-                        .map_err(|tonic_error| parse_grpc_error(&tonic_error))?
-                        .into_inner()
-                        .take_while(|grpc_result| futures::future::ready(grpc_result.is_ok()))
-                        .map_err(|tonic_error| parse_grpc_error(&tonic_error));
-
-                    while let Some(search_result) = results_stream.next().await {
-                        result_sender.send(search_result).map_err(|_| {
-                            SearchError::InternalError(
-                                "Sender closed, could not send leaf result.".into(),
+                tokio::spawn(
+                    async move {
+                        let mut tonic_request = Request::new(request);
+                        global::get_text_map_propagator(|propagator| {
+                            propagator.inject_context(
+                                &tracing::Span::current().context(),
+                                &mut MetadataMap(tonic_request.metadata_mut()),
                             )
-                        })?;
-                    }
+                        });
+                        let mut results_stream = grpc_client_clone
+                            .leaf_search_stream(tonic_request)
+                            .await
+                            .map_err(|tonic_error| parse_grpc_error(&tonic_error))?
+                            .into_inner()
+                            .take_while(|grpc_result| futures::future::ready(grpc_result.is_ok()))
+                            .map_err(|tonic_error| parse_grpc_error(&tonic_error));
 
-                    Result::<_, SearchError>::Ok(())
-                }.instrument(span));
+                        while let Some(search_result) = results_stream.next().await {
+                            result_sender.send(search_result).map_err(|_| {
+                                SearchError::InternalError(
+                                    "Sender closed, could not send leaf result.".into(),
+                                )
+                            })?;
+                        }
+
+                        Result::<_, SearchError>::Ok(())
+                    }
+                    .instrument(span),
+                );
 
                 Ok(UnboundedReceiverStream::new(result_receiver))
             }
