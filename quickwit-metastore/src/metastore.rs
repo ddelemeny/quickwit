@@ -24,7 +24,7 @@ pub mod postgresql_metastore;
 pub mod single_file_metastore;
 
 use std::collections::HashSet;
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 use std::ops::{Range, RangeInclusive};
 use std::str::FromStr;
 use std::{collections::HashMap, sync::Arc};
