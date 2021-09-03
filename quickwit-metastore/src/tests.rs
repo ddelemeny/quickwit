@@ -1160,7 +1160,8 @@ pub mod test_suite {
                 time_range: Some(RangeInclusive::new(0, 99)),
                 generation: 3,
                 update_timestamp: current_timestamp,
-                tags: to_set(&["foo", "bar"]),            },
+                tags: to_set(&["foo", "bar"]),
+            },
         };
 
         let split_metadata_2 = SplitMetadataAndFooterOffsets {
@@ -1215,7 +1216,8 @@ pub mod test_suite {
                 time_range: None,
                 generation: 3,
                 update_timestamp: current_timestamp,
-                tags: to_set(&["baz", "biz"]),            },
+                tags: to_set(&["baz", "biz"]),
+            },
         };
 
         // List all splits on a non-existent index
