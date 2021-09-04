@@ -241,8 +241,9 @@ fn create_packaged_split(
     let footer_end = split_file.written_bytes();
 
     let packaged_split = PackagedSplit {
-        index_id: split.index_id,
         split_id: split.split_id.to_string(),
+        replaced_split_ids: Vec::new(),
+        index_id: split.index_id,
         checkpoint_delta: split.checkpoint_delta,
         split_scratch_directory: split.split_scratch_directory,
         num_docs,

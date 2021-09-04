@@ -26,4 +26,5 @@ pub struct UploadedSplit {
     pub index_id: String,
     pub metadata: SplitMetadataAndFooterOffsets,
     pub checkpoint_delta: CheckpointDelta,
+    pub replaced_split_ids: Vec<String>,
 }

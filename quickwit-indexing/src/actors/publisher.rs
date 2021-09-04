@@ -27,8 +27,10 @@ use fail::fail_point;
 use quickwit_actors::Actor;
 use quickwit_actors::ActorContext;
 use quickwit_actors::AsyncActor;
+use quickwit_actors::Mailbox;
 use quickwit_actors::QueueCapacity;
 use quickwit_metastore::Metastore;
+use quickwit_metastore::SplitMetadata;
 use tokio::sync::oneshot::Receiver;
 
 #[derive(Debug, Clone, Default)]
@@ -37,13 +39,18 @@ pub struct PublisherCounters {
 }
 pub struct Publisher {
     metastore: Arc<dyn Metastore>,
+    merge_planner_mailbox: Mailbox<SplitMetadata>,
     counters: PublisherCounters,
 }
 
 impl Publisher {
-    pub fn new(metastore: Arc<dyn Metastore>) -> Publisher {
+    pub fn new(
+        metastore: Arc<dyn Metastore>,
+        merge_planner_mailbox: Mailbox<SplitMetadata>,
+    ) -> Publisher {
         Publisher {
             metastore,
+            merge_planner_mailbox,
             counters: PublisherCounters::default(),
         }
     }
@@ -67,7 +74,7 @@ impl AsyncActor for Publisher {
     async fn process_message(
         &mut self,
         uploaded_split_future: Receiver<UploadedSplit>,
-        _ctx: &ActorContext<Receiver<UploadedSplit>>,
+        ctx: &ActorContext<Receiver<UploadedSplit>>,
     ) -> Result<(), quickwit_actors::ActorExitStatus> {
         fail_point!("publisher:before");
         let uploaded_split = uploaded_split_future
@@ -81,6 +88,11 @@ impl AsyncActor for Publisher {
             )
             .await
             .with_context(|| "Failed to publish splits")?;
+        ctx.send_message(
+            &self.merge_planner_mailbox,
+            uploaded_split.metadata.split_metadata,
+        )
+        .await?;
         self.counters.num_published_splits += 1;
         fail_point!("publisher:after");
         Ok(())
@@ -90,7 +102,7 @@ impl AsyncActor for Publisher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quickwit_actors::Universe;
+    use quickwit_actors::{create_test_mailbox, Universe};
     use quickwit_metastore::checkpoint::CheckpointDelta;
     use quickwit_metastore::{MockMetastore, SplitMetadata, SplitMetadataAndFooterOffsets};
     use tokio::sync::oneshot;
@@ -117,7 +129,8 @@ mod tests {
             })
             .times(1)
             .returning(|_, _, _| Ok(()));
-        let publisher = Publisher::new(Arc::new(mock_metastore));
+        let (merge_planner_mailbox, _merge_planner_inbox) = create_test_mailbox();
+        let publisher = Publisher::new(Arc::new(mock_metastore), merge_planner_mailbox);
         let universe = Universe::new();
         let (publisher_mailbox, publisher_handle) = universe.spawn_actor(publisher).spawn_async();
         let (split_future_tx1, split_future_rx1) = oneshot::channel::<UploadedSplit>();
@@ -142,6 +155,7 @@ mod tests {
                     footer_offsets: 1000..1200
                 },
                 checkpoint_delta: CheckpointDelta::from(3..7),
+                replaced_split_ids: Vec::new(),
             })
             .is_ok());
         assert!(split_future_tx1
@@ -155,6 +169,7 @@ mod tests {
                     footer_offsets: 1000..1200
                 },
                 checkpoint_delta: CheckpointDelta::from(1..3),
+                replaced_split_ids: Vec::new(),
             })
             .is_ok());
         let publisher_observation = publisher_handle.process_pending_and_observe().await.state;

@@ -18,8 +18,11 @@
 //  You should have received a copy of the GNU Affero General Public License
 //  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use crate::actors::merge_split_downloader::MergeSplitDownloader;
 use crate::actors::Indexer;
 use crate::actors::IndexerParams;
+use crate::actors::MergeExecutor;
+use crate::actors::MergePlanner;
 use crate::actors::Packager;
 use crate::actors::Publisher;
 use crate::actors::Uploader;
@@ -27,6 +30,8 @@ use crate::models::IndexingStatistics;
 use crate::source::quickwit_supported_sources;
 use crate::source::SourceActor;
 use crate::source::SourceConfig;
+use crate::MergePolicy;
+use crate::StableMultitenantWithTimestampMergePolicy;
 use async_trait::async_trait;
 use quickwit_actors::Actor;
 use quickwit_actors::ActorContext;
@@ -37,6 +42,7 @@ use quickwit_actors::Health;
 use quickwit_actors::KillSwitch;
 use quickwit_actors::Supervisable;
 use quickwit_metastore::Metastore;
+use quickwit_metastore::SplitState;
 use quickwit_storage::StorageUriResolver;
 use smallvec::SmallVec;
 use std::sync::Arc;
@@ -47,11 +53,17 @@ use tracing::error;
 use tracing::info;
 
 pub struct IndexingPipelineHandler {
+    /// Indexing pipeline
     pub source: ActorHandle<SourceActor>,
     pub indexer: ActorHandle<Indexer>,
     pub packager: ActorHandle<Packager>,
     pub uploader: ActorHandle<Uploader>,
     pub publisher: ActorHandle<Publisher>,
+
+    /// Merging pipeline subpipeline
+    pub merge_planner: ActorHandle<MergePlanner>,
+    pub merge_split_downloader: ActorHandle<MergeSplitDownloader>,
+    pub merge_executor: ActorHandle<MergeExecutor>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -112,28 +124,27 @@ impl IndexingPipelineSupervisor {
         Ok(())
     }
 
-    fn supervisables(&self) -> SmallVec<[&dyn Supervisable; 5]> {
+    fn supervisables(&self) -> Vec<&dyn Supervisable> {
         if let Some(handlers) = self.handlers.as_ref() {
-            SmallVec::from_buf([
+            vec![
                 &handlers.source,
                 &handlers.indexer,
                 &handlers.packager,
                 &handlers.uploader,
                 &handlers.publisher,
-            ])
+            ]
         } else {
-            SmallVec::new()
+            Vec::new()
         }
     }
 
     /// Performs healthcheck on all of the actors in the pipeline,
     /// and consolidates the result.
     fn healthcheck(&self) -> Health {
-        let supervisables = self.supervisables();
         let mut healthy_actors: SmallVec<[&str; 5]> = Default::default();
         let mut failure_or_unhealthy_actors: SmallVec<[&str; 5]> = Default::default();
         let mut success_actors: SmallVec<[&str; 5]> = Default::default();
-        for &supervisable in &supervisables {
+        for supervisable in self.supervisables() {
             match supervisable.health() {
                 Health::Healthy => {
                     // At least one other actor is running.
@@ -148,7 +159,7 @@ impl IndexingPipelineSupervisor {
             }
         }
         if failure_or_unhealthy_actors.is_empty() {
-            if success_actors.len() == supervisables.len() {
+            if healthy_actors.is_empty() {
                 // all actors finished successfully.
                 info!("indexing pipeline success!");
                 Health::Success
@@ -177,11 +188,47 @@ impl IndexingPipelineSupervisor {
             .storage_uri_resolver
             .resolve(&index_metadata.index_uri)?;
 
-        let publisher = Publisher::new(self.params.metastore.clone());
+        let merge_executor = MergeExecutor {};
+        let (merge_executor_mailbox, merge_executor_handler) = ctx
+            .spawn_actor(merge_executor)
+            .set_kill_switch(self.kill_switch.clone())
+            .spawn_sync();
+
+        let merge_split_downloader = MergeSplitDownloader {
+            scratch_directory: self.params.indexer_params.scratch_directory.clone(),
+            storage: index_storage.clone(),
+            merge_executor_mailbox,
+        };
+        let (merge_split_downloader_mailbox, merge_split_downloader_handler) = ctx
+            .spawn_actor(merge_split_downloader)
+            .set_kill_switch(self.kill_switch.clone())
+            .spawn_async();
+
+        let merge_policy: Arc<dyn MergePolicy> =
+            Arc::new(StableMultitenantWithTimestampMergePolicy::default());
+
+        let mut merge_planner = MergePlanner::new(merge_policy, merge_split_downloader_mailbox);
+        for split in self
+            .params
+            .metastore
+            .list_splits(&self.params.index_id, SplitState::Published, None, &[])
+            .await?
+        {
+            merge_planner.add_split(split.split_metadata);
+        }
+        let (merge_planner_mailbox, merge_planner_handler) = ctx
+            .spawn_actor(merge_planner)
+            .set_kill_switch(self.kill_switch.clone())
+            .spawn_sync();
+
+        // Publisher
+        let publisher = Publisher::new(self.params.metastore.clone(), merge_planner_mailbox);
         let (publisher_mailbox, publisher_handler) = ctx
             .spawn_actor(publisher)
             .set_kill_switch(self.kill_switch.clone())
             .spawn_async();
+
+        // Uploader
         let uploader = Uploader::new(
             self.params.metastore.clone(),
             index_storage,
@@ -191,12 +238,15 @@ impl IndexingPipelineSupervisor {
             .spawn_actor(uploader)
             .set_kill_switch(self.kill_switch.clone())
             .spawn_async();
-        info!(actor_name=%uploader_mailbox.actor_instance_id());
+
+        // Packager
         let packager = Packager::new(uploader_mailbox);
         let (packager_mailbox, packager_handler) = ctx
             .spawn_actor(packager)
             .set_kill_switch(self.kill_switch.clone())
             .spawn_sync();
+
+        // Indexer
         let indexer = Indexer::try_new(
             self.params.index_id.clone(),
             index_metadata.index_config.clone(),
@@ -207,6 +257,8 @@ impl IndexingPipelineSupervisor {
             .spawn_actor(indexer)
             .set_kill_switch(self.kill_switch.clone())
             .spawn_sync();
+
+        // Source
         let source = quickwit_supported_sources()
             .load_source(self.params.source_config.clone(), index_metadata.checkpoint)
             .await?;
@@ -218,12 +270,17 @@ impl IndexingPipelineSupervisor {
             .spawn_actor(actor_source)
             .set_kill_switch(self.kill_switch.clone())
             .spawn_async();
+
         self.handlers = Some(IndexingPipelineHandler {
             source: source_handler,
             indexer: indexer_handler,
             packager: packager_handler,
             uploader: uploader_handler,
             publisher: publisher_handler,
+
+            merge_planner: merge_planner_handler,
+            merge_split_downloader: merge_split_downloader_handler,
+            merge_executor: merge_executor_handler,
         });
         Ok(())
     }
@@ -320,6 +377,10 @@ mod tests {
     async fn test_indexing_pipeline() -> anyhow::Result<()> {
         quickwit_common::setup_logging_for_tests();
         let mut metastore = MockMetastore::default();
+        metastore
+            .expect_list_splits()
+            .times(1)
+            .returning(|_, _, _, _| Ok(Vec::new()));
         metastore
             .expect_index_metadata()
             .withf(|index_id| index_id == "test-index")

@@ -1,3 +1,6 @@
+use crate::merge_policy::MergeOperation;
+use crate::models::ScratchDirectory;
+
 // Quickwit
 //  Copyright (C) 2021 Quickwit Inc.
 //
@@ -18,26 +21,8 @@
 //  You should have received a copy of the GNU Affero General Public License
 //  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-mod pipeline_supervisor;
-
-mod indexer;
-mod packager;
-mod publisher;
-mod uploader;
-
-mod merge_executor;
-mod merge_planner;
-mod merge_split_downloader;
-
-pub use self::indexer::{Indexer, IndexerCounters, IndexerParams};
-pub use self::packager::Packager;
-pub use self::publisher::{Publisher, PublisherCounters};
-pub use self::uploader::{Uploader, UploaderCounters};
-
-pub use self::merge_executor::MergeExecutor;
-pub use self::merge_planner::MergePlanner;
-pub use self::merge_split_downloader::MergeSplitDownloader;
-
-pub use pipeline_supervisor::{
-    IndexingPipelineHandler, IndexingPipelineParams, IndexingPipelineSupervisor,
-};
+#[derive(Debug)]
+pub struct MergeScratch {
+    pub merge_operation: MergeOperation,
+    pub merge_scratch_directory: ScratchDirectory,
+}

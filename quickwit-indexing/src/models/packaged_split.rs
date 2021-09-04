@@ -27,6 +27,7 @@ use tantivy::SegmentId;
 #[derive(Debug)]
 pub struct PackagedSplit {
     pub split_id: String,
+    pub replaced_split_ids: Vec<String>,
     pub index_id: String,
     pub checkpoint_delta: CheckpointDelta,
     pub time_range: Option<RangeInclusive<i64>>,

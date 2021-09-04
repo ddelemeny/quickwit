@@ -18,26 +18,28 @@
 //  You should have received a copy of the GNU Affero General Public License
 //  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-mod pipeline_supervisor;
+use crate::models::MergeScratch;
+use quickwit_actors::Actor;
+use quickwit_actors::SyncActor;
 
-mod indexer;
-mod packager;
-mod publisher;
-mod uploader;
+pub struct MergeExecutor {}
 
-mod merge_executor;
-mod merge_planner;
-mod merge_split_downloader;
+impl Actor for MergeExecutor {
+    type Message = MergeScratch;
 
-pub use self::indexer::{Indexer, IndexerCounters, IndexerParams};
-pub use self::packager::Packager;
-pub use self::publisher::{Publisher, PublisherCounters};
-pub use self::uploader::{Uploader, UploaderCounters};
+    type ObservableState = ();
 
-pub use self::merge_executor::MergeExecutor;
-pub use self::merge_planner::MergePlanner;
-pub use self::merge_split_downloader::MergeSplitDownloader;
+    fn observable_state(&self) -> Self::ObservableState {}
+}
 
-pub use pipeline_supervisor::{
-    IndexingPipelineHandler, IndexingPipelineParams, IndexingPipelineSupervisor,
-};
+impl SyncActor for MergeExecutor {
+    fn process_message(
+        &mut self,
+        merge_scratch: MergeScratch,
+        ctx: &quickwit_actors::ActorContext<Self::Message>,
+    ) -> Result<(), quickwit_actors::ActorExitStatus> {
+        Ok(())
+    }
+}
+
+impl MergeExecutor {}

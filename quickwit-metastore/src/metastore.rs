@@ -77,7 +77,8 @@ pub struct SplitMetadata {
     /// JSON payloads.
     pub size_in_bytes: u64,
 
-    /// If a timestamp field is available, the min / max timestamp in the split.
+    /// If a timestamp field is available, the min / max timestamp in
+    /// the split.
     pub time_range: Option<RangeInclusive<i64>>,
 
     /// Encodes the type of demux operation the split has gone through.
