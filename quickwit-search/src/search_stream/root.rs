@@ -1,53 +1,43 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use bytes::Bytes;
 use futures::StreamExt;
-use itertools::Either;
-use itertools::Itertools;
-use quickwit_metastore::SplitMetadataAndFooterOffsets;
-use quickwit_proto::LeafSearchStreamRequest;
-use quickwit_proto::SearchStreamRequest;
-use quickwit_proto::SplitIdAndFooterOffsets;
+use itertools::{Either, Itertools};
+use quickwit_metastore::{Metastore, SplitMetadataAndFooterOffsets};
+use quickwit_proto::{
+    LeafSearchStreamRequest, SearchRequest, SearchStreamRequest, SplitIdAndFooterOffsets
+};
 use tracing::*;
 
-use quickwit_metastore::Metastore;
-use quickwit_proto::SearchRequest;
-
 use crate::client_pool::Job;
-use crate::list_relevant_splits;
-use crate::root::job_for_splits;
-use crate::root::NodeSearchError;
-use crate::ClientPool;
-use crate::SearchClientPool;
-use crate::SearchError;
+use crate::root::{job_for_splits, NodeSearchError};
+use crate::{list_relevant_splits, ClientPool, SearchClientPool, SearchError};
 
 /// Perform a distributed search stream.
 pub async fn root_search_stream(
     search_stream_request: &SearchStreamRequest,
     metastore: &dyn Metastore,
-    client_pool: &Arc<SearchClientPool>,
+    client_pool: &Arc<SearchClientPool>
 ) -> Result<Vec<Bytes>, SearchError> {
     let start_instant = tokio::time::Instant::now();
     // TODO: building a search request should not be necessary for listing splits.
@@ -80,14 +70,14 @@ pub async fn root_search_stream(
             .map(|job| SplitIdAndFooterOffsets {
                 split_id: job.metadata.split_metadata.split_id.clone(),
                 split_footer_start: job.metadata.footer_offsets.start,
-                split_footer_end: job.metadata.footer_offsets.end,
+                split_footer_end: job.metadata.footer_offsets.end
             })
             .collect();
         let leaf_request = LeafSearchStreamRequest {
             request: Some(search_stream_request.clone()),
             split_metadata: split_metadata_list.clone(),
             index_config: index_config_str.to_string(),
-            index_uri: index_metadata.index_uri.to_string(),
+            index_uri: index_metadata.index_uri.to_string()
         };
         debug!(leaf_request=?leaf_request, grpc_addr=?search_client.grpc_addr(), "Leaf node search stream.");
         let handle = tokio::spawn(async move {
@@ -99,7 +89,7 @@ pub async fn root_search_stream(
                     split_ids: split_metadata_list
                         .iter()
                         .map(|split| split.split_id.clone())
-                        .collect(),
+                        .collect()
                 })?;
 
             let mut leaf_bytes: Vec<Bytes> = Vec::new();
@@ -109,7 +99,7 @@ pub async fn root_search_stream(
                     split_ids: split_metadata_list
                         .iter()
                         .map(|split| split.split_id.clone())
-                        .collect(),
+                        .collect()
                 })?;
                 leaf_bytes.push(Bytes::from(leaf_data.data));
             }
@@ -124,7 +114,7 @@ pub async fn root_search_stream(
             .into_iter()
             .partition_map(|result| match result {
                 Ok(bytes) => Either::Left(bytes),
-                Err(error) => Either::Right(error),
+                Err(error) => Either::Right(error)
             });
     let overall_bytes: Vec<Bytes> = itertools::concat(nodes_bytes);
     if !errors.is_empty() {
@@ -138,16 +128,17 @@ pub async fn root_search_stream(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use std::ops::Range;
 
-    use crate::MockSearchService;
     use quickwit_core::mock_split_meta;
     use quickwit_index_config::WikipediaIndexConfig;
-    use quickwit_metastore::{checkpoint::Checkpoint, IndexMetadata, MockMetastore, SplitState};
+    use quickwit_metastore::checkpoint::Checkpoint;
+    use quickwit_metastore::{IndexMetadata, MockMetastore, SplitState};
     use quickwit_proto::OutputFormat;
     use tokio_stream::wrappers::UnboundedReceiverStream;
+
+    use super::*;
+    use crate::MockSearchService;
 
     #[tokio::test]
     async fn test_root_search_stream_single_split() -> anyhow::Result<()> {
@@ -159,7 +150,7 @@ mod tests {
             end_timestamp: None,
             fast_field: "timestamp".to_string(),
             output_format: OutputFormat::Csv as i32,
-            tags: vec![],
+            tags: vec![]
         };
         let mut metastore = MockMetastore::new();
         metastore
@@ -169,27 +160,27 @@ mod tests {
                     index_id: "test-idx".to_string(),
                     index_uri: "file:///path/to/index/test-idx".to_string(),
                     index_config: Arc::new(WikipediaIndexConfig::new()),
-                    checkpoint: Checkpoint::default(),
+                    checkpoint: Checkpoint::default()
                 })
             });
         metastore.expect_list_splits().returning(
             |_index_id: &str,
              _split_state: SplitState,
              _time_range: Option<Range<i64>>,
-             _tags: &[String]| { Ok(vec![mock_split_meta("split1")]) },
+             _tags: &[String]| { Ok(vec![mock_split_meta("split1")]) }
         );
         let mut mock_search_service = MockSearchService::new();
         let (result_sender, result_receiver) = tokio::sync::mpsc::unbounded_channel();
         result_sender.send(Ok(quickwit_proto::LeafSearchStreamResult {
-            data: b"123".to_vec(),
+            data: b"123".to_vec()
         }))?;
         result_sender.send(Ok(quickwit_proto::LeafSearchStreamResult {
-            data: b"456".to_vec(),
+            data: b"456".to_vec()
         }))?;
         mock_search_service.expect_leaf_search_stream().return_once(
             |_leaf_search_req: quickwit_proto::LeafSearchStreamRequest| {
                 Ok(UnboundedReceiverStream::new(result_receiver))
-            },
+            }
         );
         // The test will hang on indefinitely if we don't drop the sender.
         drop(result_sender);
@@ -212,7 +203,7 @@ mod tests {
             end_timestamp: None,
             fast_field: "timestamp".to_string(),
             output_format: OutputFormat::Csv as i32,
-            tags: vec![],
+            tags: vec![]
         };
         let mut metastore = MockMetastore::new();
         metastore
@@ -222,25 +213,25 @@ mod tests {
                     index_id: "test-idx".to_string(),
                     index_uri: "file:///path/to/index/test-idx".to_string(),
                     index_config: Arc::new(WikipediaIndexConfig::new()),
-                    checkpoint: Checkpoint::default(),
+                    checkpoint: Checkpoint::default()
                 })
             });
         metastore.expect_list_splits().returning(
             |_index_id: &str,
              _split_state: SplitState,
              _time_range: Option<Range<i64>>,
-             _tags: &[String]| { Ok(vec![mock_split_meta("split1")]) },
+             _tags: &[String]| { Ok(vec![mock_split_meta("split1")]) }
         );
         let mut mock_search_service = MockSearchService::new();
         let (result_sender, result_receiver) = tokio::sync::mpsc::unbounded_channel();
         result_sender.send(Ok(quickwit_proto::LeafSearchStreamResult {
-            data: b"123".to_vec(),
+            data: b"123".to_vec()
         }))?;
         result_sender.send(Err(SearchError::InternalError("error".to_string())))?;
         mock_search_service.expect_leaf_search_stream().return_once(
             |_leaf_search_req: quickwit_proto::LeafSearchStreamRequest| {
                 Ok(UnboundedReceiverStream::new(result_receiver))
-            },
+            }
         );
         // The test will hang on indefinitely if we don't drop the sender.
         drop(result_sender);
@@ -248,7 +239,11 @@ mod tests {
             Arc::new(SearchClientPool::from_mocks(vec![Arc::new(mock_search_service)]).await?);
         let result = root_search_stream(&request, &metastore, &client_pool).await;
         assert_eq!(result.is_err(), true);
-        assert_eq!(result.unwrap_err().to_string(), "Internal error: `[NodeSearchError { search_error: InternalError(\"error\"), split_ids: [\"split1\"] }]`.");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Internal error: `[NodeSearchError { search_error: InternalError(\"error\"), \
+             split_ids: [\"split1\"] }]`."
+        );
         Ok(())
     }
 }

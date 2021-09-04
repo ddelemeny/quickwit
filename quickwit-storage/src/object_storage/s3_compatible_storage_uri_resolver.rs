@@ -1,31 +1,29 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+use std::str::FromStr;
+use std::sync::Arc;
 
 use ec2_instance_metadata::{InstanceMetadata, InstanceMetadataClient};
 use once_cell::sync::OnceCell;
 use quickwit_common::{get_quickwit_env, QuickwitEnv};
 pub use rusoto_core::Region;
-use std::str::FromStr;
-use std::sync::Arc;
 
 use crate::{S3CompatibleObjectStorage, StorageFactory};
 
@@ -55,7 +53,7 @@ pub enum RegionProvider {
     /// If the QUICKWIT_ENV environment variable is set to LOCAL,
     /// quickwit will try to connect to `localhost:4566`
     /// otherwise, it will try to connect to `localstack:4566`.
-    Localstack,
+    Localstack
 }
 
 /// Returns a localstack region (used for testing).
@@ -67,7 +65,7 @@ fn localstack_region() -> Region {
     };
     Region::Custom {
         name: "localstack".to_string(),
-        endpoint,
+        endpoint
     }
 }
 
@@ -87,7 +85,7 @@ impl RegionProvider {
     pub fn get_region(&self) -> Region {
         match self {
             RegionProvider::S3 => sniff_s3_default_region(),
-            RegionProvider::Localstack => localstack_region(),
+            RegionProvider::Localstack => localstack_region()
         }
     }
 }
@@ -99,7 +97,7 @@ impl RegionProvider {
 /// region from ec2 instance metadata and lastly to default value `Region::UsEast1`.
 pub struct S3CompatibleObjectStorageFactory {
     region_provider: RegionProvider,
-    protocol: &'static str,
+    protocol: &'static str
 }
 
 impl S3CompatibleObjectStorageFactory {
@@ -107,7 +105,7 @@ impl S3CompatibleObjectStorageFactory {
     pub fn new(region_provider: RegionProvider, protocol: &'static str) -> Self {
         S3CompatibleObjectStorageFactory {
             region_provider,
-            protocol,
+            protocol
         }
     }
 }

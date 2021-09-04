@@ -1,43 +1,44 @@
-/*
- * Copyright (C) 2021 Quickwit Inc.
- *
- * Quickwit is offered under the AGPL v3.0 and as commercial software.
- * For commercial licensing, contact us at hello@quickwit.io.
- *
- * AGPL:
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+use std::any::Any;
+use std::borrow::Borrow;
+use std::fmt;
+use std::sync::Arc;
+
+use tokio::sync::{oneshot, watch};
+use tokio::task::JoinHandle;
+use tokio::time::timeout;
+use tracing::error;
+
 use crate::actor_state::ActorState;
 use crate::channel_with_priority::Priority;
 use crate::mailbox::Command;
 use crate::observation::ObservationType;
 use crate::{Actor, ActorContext, ActorExitStatus, Observation};
-use std::any::Any;
-use std::borrow::Borrow;
-use std::fmt;
-use std::sync::Arc;
-use tokio::sync::{oneshot, watch};
-use tokio::task::JoinHandle;
-use tokio::time::timeout;
-use tracing::error;
 
 /// An Actor Handle serves as an address to communicate with an actor.
 pub struct ActorHandle<A: Actor> {
     actor_context: ActorContext<A::Message>,
     last_state: watch::Receiver<A::ObservableState>,
     join_handle: JoinHandle<()>,
-    pub actor_exit_status: watch::Receiver<Option<ActorExitStatus>>,
+    pub actor_exit_status: watch::Receiver<Option<ActorExitStatus>>
 }
 
 /// Describes the health of a given actor.
@@ -48,7 +49,7 @@ pub enum Health {
     /// No progress was registered, or the process terminated with an error
     FailureOrUnhealthy,
     /// The actor terminated successfully.
-    Success,
+    Success
 }
 
 impl<A: Actor> fmt::Debug for ActorHandle<A> {
@@ -100,13 +101,13 @@ impl<A: Actor> ActorHandle<A> {
         last_state: watch::Receiver<A::ObservableState>,
         join_handle: JoinHandle<()>,
         actor_context: ActorContext<A::Message>,
-        actor_exit_status: watch::Receiver<Option<ActorExitStatus>>,
+        actor_exit_status: watch::Receiver<Option<ActorExitStatus>>
     ) -> Self {
         ActorHandle {
             actor_context,
             last_state,
             join_handle,
-            actor_exit_status,
+            actor_exit_status
         }
     }
 
@@ -134,8 +135,8 @@ impl<A: Actor> ActorHandle<A> {
                 "Failed to send observe message"
             );
         }
-        // The timeout is required here. If the actor fails, its inbox is properly dropped but the send channel might actually
-        // prevent the onechannel Receiver from being dropped.
+        // The timeout is required here. If the actor fails, its inbox is properly dropped but the
+        // send channel might actually prevent the onechannel Receiver from being dropped.
         self.wait_for_observable_state_callback(rx).await
     }
 
@@ -204,7 +205,7 @@ impl<A: Actor> ActorHandle<A> {
                     )))
                 }),
             Err(join_err) if join_err.is_panic() => ActorExitStatus::Panicked,
-            Err(_) => ActorExitStatus::Killed,
+            Err(_) => ActorExitStatus::Killed
         };
         let observation = self.last_state.borrow().clone();
         (exit_status, observation)
@@ -220,7 +221,7 @@ impl<A: Actor> ActorHandle<A> {
             let state = self.last_observation().borrow().clone();
             return Observation {
                 obs_type: ObservationType::PostMortem,
-                state,
+                state
             };
         }
         if self
@@ -244,7 +245,7 @@ impl<A: Actor> ActorHandle<A> {
 
     async fn wait_for_observable_state_callback(
         &self,
-        rx: oneshot::Receiver<Box<dyn Any + Send>>,
+        rx: oneshot::Receiver<Box<dyn Any + Send>>
     ) -> Observation<A::ObservableState> {
         let observable_state_or_timeout = timeout(crate::HEARTBEAT, rx).await;
         match observable_state_or_timeout {
@@ -275,16 +276,14 @@ impl<A: Actor> ActorHandle<A> {
 
 #[cfg(test)]
 mod tests {
-    use crate::AsyncActor;
-    use crate::SyncActor;
-    use crate::Universe;
     use async_trait::async_trait;
 
     use super::*;
+    use crate::{AsyncActor, SyncActor, Universe};
 
     #[derive(Default)]
     struct PanickingActor {
-        count: usize,
+        count: usize
     }
 
     impl Actor for PanickingActor {
@@ -299,7 +298,7 @@ mod tests {
         fn process_message(
             &mut self,
             _message: Self::Message,
-            _ctx: &ActorContext<Self::Message>,
+            _ctx: &ActorContext<Self::Message>
         ) -> Result<(), ActorExitStatus> {
             self.count += 1;
             panic!("Oops");
@@ -311,7 +310,7 @@ mod tests {
         async fn process_message(
             &mut self,
             _message: Self::Message,
-            _ctx: &ActorContext<Self::Message>,
+            _ctx: &ActorContext<Self::Message>
         ) -> Result<(), ActorExitStatus> {
             self.count += 1;
             panic!("Oops");
@@ -320,7 +319,7 @@ mod tests {
 
     #[derive(Default)]
     struct ExitActor {
-        count: usize,
+        count: usize
     }
 
     impl Actor for ExitActor {
@@ -335,7 +334,7 @@ mod tests {
         fn process_message(
             &mut self,
             _message: Self::Message,
-            _ctx: &ActorContext<Self::Message>,
+            _ctx: &ActorContext<Self::Message>
         ) -> Result<(), ActorExitStatus> {
             self.count += 1;
             Err(ActorExitStatus::DownstreamClosed)
@@ -347,7 +346,7 @@ mod tests {
         async fn process_message(
             &mut self,
             _message: Self::Message,
-            _ctx: &ActorContext<Self::Message>,
+            _ctx: &ActorContext<Self::Message>
         ) -> Result<(), ActorExitStatus> {
             self.count += 1;
             Err(ActorExitStatus::DownstreamClosed)

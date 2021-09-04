@@ -1,22 +1,21 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use serde::Serialize;
 use tracing::error;
@@ -31,7 +30,7 @@ pub struct SearchResultJson {
     /// List of hits returned.
     pub hits: Vec<serde_json::Value>,
     /// Elapsed time.
-    pub num_microsecs: u64,
+    pub num_microsecs: u64
 }
 
 impl From<quickwit_proto::SearchResult> for SearchResultJson {
@@ -50,7 +49,7 @@ impl From<quickwit_proto::SearchResult> for SearchResultJson {
         SearchResultJson {
             num_hits: search_result.num_hits,
             hits,
-            num_microsecs: search_result.elapsed_time_micros,
+            num_microsecs: search_result.elapsed_time_micros
         }
     }
 }

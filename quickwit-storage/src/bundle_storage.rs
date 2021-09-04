@@ -1,31 +1,22 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
-use crate::Storage;
-use crate::{StorageError, StorageResult};
-use async_trait::async_trait;
-use bytes::Bytes;
-use serde::Deserialize;
-use serde::Serialize;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
@@ -35,11 +26,17 @@ use std::io::{self, ErrorKind, Read, Write};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+use async_trait::async_trait;
+use bytes::Bytes;
+use serde::{Deserialize, Serialize};
 use tantivy::common::CountingWriter;
 use tantivy::directory::FileSlice;
 use tantivy::HasLen;
 use thiserror::Error;
 use tracing::error;
+
+use crate::{Storage, StorageError, StorageResult};
 
 /// Filename used for the bundle.
 pub const BUNDLE_FILENAME: &str = "bundle";
@@ -49,23 +46,24 @@ pub const BUNDLE_FILENAME: &str = "bundle";
 pub struct BundleStorage {
     storage: Arc<dyn Storage>,
     bundle_filepath: PathBuf,
-    metadata: BundleStorageFileOffsets,
+    metadata: BundleStorageFileOffsets
 }
 
 impl BundleStorage {
     /// Creates a new BundleStorage.
     ///
-    /// The provided data must include the footer_bytes at the end of the slice, but it can have more up front.
+    /// The provided data must include the footer_bytes at the end of the slice, but it can have
+    /// more up front.
     pub fn new(
         storage: Arc<dyn Storage>,
         bundle_filepath: PathBuf,
-        meta_data: &[u8],
+        meta_data: &[u8]
     ) -> Result<Self, CorruptedData> {
         let metadata = BundleStorageFileOffsets::open(meta_data)?;
         Ok(BundleStorage {
             storage,
             bundle_filepath,
-            metadata,
+            metadata
         })
     }
 }
@@ -75,7 +73,7 @@ impl BundleStorage {
 pub struct CorruptedData {
     #[from]
     #[source]
-    pub error: serde_json::Error,
+    pub error: serde_json::Error
 }
 
 const FOOTER_LENGTH_NUM_BYTES: usize = std::mem::size_of::<u64>();
@@ -83,7 +81,7 @@ const FOOTER_LENGTH_NUM_BYTES: usize = std::mem::size_of::<u64>();
 /// Returns the file offsets in the file bundle.
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct BundleStorageFileOffsets {
-    files: HashMap<PathBuf, Range<usize>>,
+    files: HashMap<PathBuf, Range<usize>>
 }
 
 impl BundleStorageFileOffsets {
@@ -150,7 +148,7 @@ impl Storage for BundleStorage {
         self.storage
             .get_slice(
                 &self.bundle_filepath,
-                file_offsets.start as usize..file_offsets.end as usize,
+                file_offsets.start as usize..file_offsets.end as usize
             )
             .await
     }
@@ -200,7 +198,7 @@ fn unsupported_operation(path: &Path) -> StorageError {
 /// with some metadata
 pub struct BundleStorageBuilder<W> {
     metadata: BundleStorageFileOffsets,
-    counting_writer: CountingWriter<W>,
+    counting_writer: CountingWriter<W>
 }
 
 impl<W: io::Write> BundleStorageBuilder<W> {
@@ -209,7 +207,7 @@ impl<W: io::Write> BundleStorageBuilder<W> {
         let counting_writer = CountingWriter::wrap(wrt);
         Ok(BundleStorageBuilder {
             counting_writer,
-            metadata: Default::default(),
+            metadata: Default::default()
         })
     }
 
@@ -220,7 +218,7 @@ impl<W: io::Write> BundleStorageBuilder<W> {
     pub fn add_file_from_read<R: Read>(
         &mut self,
         mut read: R,
-        file_name: PathBuf,
+        file_name: PathBuf
     ) -> io::Result<()> {
         let start_offset = self.counting_writer.written_bytes() as usize;
         io::copy(&mut read, &mut self.counting_writer)?;
@@ -240,7 +238,7 @@ impl<W: io::Write> BundleStorageBuilder<W> {
         let file_name = PathBuf::from(path.file_name().ok_or_else(|| {
             io::Error::new(
                 ErrorKind::InvalidInput,
-                format!("could not extract file_name from path {:?}", path),
+                format!("could not extract file_name from path {:?}", path)
             )
         })?);
         self.add_file_from_read(file, file_name)?;
@@ -268,9 +266,8 @@ impl<W: io::Write> BundleStorageBuilder<W> {
 mod tests {
     use std::fs;
 
-    use crate::RamStorageBuilder;
-
     use super::*;
+    use crate::RamStorageBuilder;
 
     #[tokio::test]
     async fn bundle_storage_file_offsets() -> anyhow::Result<()> {
@@ -303,7 +300,7 @@ mod tests {
         let bundle_storage = BundleStorage {
             metadata,
             bundle_filepath: bundle_filepath.to_path_buf(),
-            storage: Arc::new(ram_storage),
+            storage: Arc::new(ram_storage)
         };
         let f1_data = bundle_storage.get_all(Path::new("f1")).await?;
         assert_eq!(&*f1_data, &[123u8, 76u8]);
@@ -341,7 +338,7 @@ mod tests {
         let bundle_storage = BundleStorage {
             metadata,
             bundle_filepath: bundle_filepath.to_path_buf(),
-            storage: Arc::new(ram_storage),
+            storage: Arc::new(ram_storage)
         };
         let f1_data = bundle_storage.get_all(Path::new("f1")).await?;
         assert_eq!(&*f1_data, &[123u8, 76u8]);
@@ -368,7 +365,7 @@ mod tests {
         let bundle_storage = BundleStorage {
             metadata,
             bundle_filepath,
-            storage: Arc::new(ram_storage),
+            storage: Arc::new(ram_storage)
         };
 
         assert_eq!(bundle_storage.exists(Path::new("blub")).await?, false);

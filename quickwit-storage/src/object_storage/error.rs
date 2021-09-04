@@ -1,33 +1,29 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
-
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::error::Error as StdError;
-use std::fmt;
-use std::io;
+use std::{fmt, io};
 
 use rusoto_core::RusotoError;
 use rusoto_s3::{
     AbortMultipartUploadError, CompleteMultipartUploadError, CreateMultipartUploadError,
-    DeleteObjectError, GetObjectError, HeadObjectError, PutObjectError, UploadPartError,
+    DeleteObjectError, GetObjectError, HeadObjectError, PutObjectError, UploadPartError
 };
 
 use crate::retry::IsRetryable;
@@ -71,14 +67,13 @@ impl<T: StdError> IsRetryable for RusotoErrorWrapper<T> {
             RusotoError::HttpDispatch(_) => true,
             RusotoError::Service(_) => false,
             RusotoError::Unknown(http_resp) => http_resp.status.is_server_error(),
-            _ => false,
+            _ => false
         }
     }
 }
 
 impl<T> From<RusotoErrorWrapper<T>> for StorageError
-where
-    T: Send + Sync + std::error::Error + 'static + ToStorageErrorKind,
+where T: Send + Sync + std::error::Error + 'static + ToStorageErrorKind
 {
     fn from(err: RusotoErrorWrapper<T>) -> StorageError {
         let error_kind = match &err.0 {
@@ -87,9 +82,9 @@ where
             RusotoError::Unknown(http_resp) => match http_resp.status.as_u16() {
                 403 => StorageErrorKind::Unauthorized,
                 404 => StorageErrorKind::DoesNotExist,
-                _ => StorageErrorKind::InternalError,
+                _ => StorageErrorKind::InternalError
             },
-            _ => StorageErrorKind::InternalError,
+            _ => StorageErrorKind::InternalError
         };
         error_kind.with_error(err)
     }
@@ -103,7 +98,7 @@ impl ToStorageErrorKind for GetObjectError {
     fn to_storage_error_kind(&self) -> StorageErrorKind {
         match self {
             GetObjectError::InvalidObjectState(_) => StorageErrorKind::Service,
-            GetObjectError::NoSuchKey(_) => StorageErrorKind::DoesNotExist,
+            GetObjectError::NoSuchKey(_) => StorageErrorKind::DoesNotExist
         }
     }
 }

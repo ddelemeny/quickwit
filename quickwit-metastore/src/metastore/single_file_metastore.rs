@@ -1,24 +1,21 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
-
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::HashMap;
 use std::ops::{Range, RangeInclusive};
@@ -27,18 +24,17 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::Utc;
+use quickwit_storage::{
+    quickwit_storage_uri_resolver, PutPayload, Storage, StorageErrorKind, StorageResolverError,
+    StorageUriResolver
+};
 use tokio::sync::RwLock;
 
-use quickwit_storage::StorageUriResolver;
-use quickwit_storage::{quickwit_storage_uri_resolver, StorageResolverError};
-use quickwit_storage::{PutPayload, Storage, StorageErrorKind};
-
 use crate::checkpoint::CheckpointDelta;
-use crate::MetastoreFactory;
-use crate::MetastoreResolverError;
 use crate::{
-    IndexMetadata, MetadataSet, Metastore, MetastoreError, MetastoreResult, SplitMetadata,
-    SplitMetadataAndFooterOffsets, SplitState,
+    IndexMetadata, MetadataSet, Metastore, MetastoreError, MetastoreFactory,
+    MetastoreResolverError, MetastoreResult, SplitMetadata, SplitMetadataAndFooterOffsets,
+    SplitState
 };
 
 /// Metadata file managed by [`SingleFileMetastore`].
@@ -57,7 +53,7 @@ fn is_disjoint(left: &Range<i64>, right: &RangeInclusive<i64>) -> bool {
 /// Single file metastore implementation.
 pub struct SingleFileMetastore {
     storage: Arc<dyn Storage>,
-    cache: Arc<RwLock<HashMap<String, MetadataSet>>>,
+    cache: Arc<RwLock<HashMap<String, MetadataSet>>>
 }
 
 #[allow(dead_code)]
@@ -73,7 +69,7 @@ impl SingleFileMetastore {
     pub fn new(storage: Arc<dyn Storage>) -> Self {
         SingleFileMetastore {
             storage,
-            cache: Arc::new(RwLock::new(HashMap::new())),
+            cache: Arc::new(RwLock::new(HashMap::new()))
         }
     }
 
@@ -87,15 +83,15 @@ impl SingleFileMetastore {
             .await
             .map_err(|storage_err| match storage_err.kind() {
                 StorageErrorKind::DoesNotExist => MetastoreError::IndexDoesNotExist {
-                    index_id: index_id.to_string(),
+                    index_id: index_id.to_string()
                 },
                 StorageErrorKind::Unauthorized => MetastoreError::Forbidden {
-                    message: "The request credentials do not allow this operation.".to_string(),
+                    message: "The request credentials do not allow this operation.".to_string()
                 },
                 _ => MetastoreError::InternalError {
                     message: "Failed to check index file existence.".to_string(),
-                    cause: anyhow::anyhow!(storage_err),
-                },
+                    cause: anyhow::anyhow!(storage_err)
+                }
             })?;
 
         Ok(exists)
@@ -122,15 +118,15 @@ impl SingleFileMetastore {
             .await
             .map_err(|storage_err| match storage_err.kind() {
                 StorageErrorKind::DoesNotExist => MetastoreError::IndexDoesNotExist {
-                    index_id: index_id.to_string(),
+                    index_id: index_id.to_string()
                 },
                 StorageErrorKind::Unauthorized => MetastoreError::Forbidden {
-                    message: "The request credentials do not allow for this operation.".to_string(),
+                    message: "The request credentials do not allow for this operation.".to_string()
                 },
                 _ => MetastoreError::InternalError {
                     message: "Failed to get index files.".to_string(),
-                    cause: anyhow::anyhow!(storage_err),
-                },
+                    cause: anyhow::anyhow!(storage_err)
+                }
             })?;
 
         let metadata_set = serde_json::from_slice::<MetadataSet>(&content[..])
@@ -149,7 +145,7 @@ impl SingleFileMetastore {
         let content: Vec<u8> = serde_json::to_vec(&metadata_set).map_err(|serde_err| {
             MetastoreError::InternalError {
                 message: "Failed to serialize Metadata set".to_string(),
-                cause: anyhow::anyhow!(serde_err),
+                cause: anyhow::anyhow!(serde_err)
             }
         })?;
 
@@ -162,12 +158,12 @@ impl SingleFileMetastore {
             .await
             .map_err(|storage_err| match storage_err.kind() {
                 StorageErrorKind::Unauthorized => MetastoreError::Forbidden {
-                    message: "The request credentials do not allow for this operation.".to_string(),
+                    message: "The request credentials do not allow for this operation.".to_string()
                 },
                 _ => MetastoreError::InternalError {
                     message: "Failed to put metadata set back into storage.".to_string(),
-                    cause: anyhow::anyhow!(storage_err),
-                },
+                    cause: anyhow::anyhow!(storage_err)
+                }
             })?;
 
         // Update the internal data if the storage is successfully updated.
@@ -180,13 +176,13 @@ impl SingleFileMetastore {
     /// Helper to mark a list of splits as published.
     fn mark_splits_as_published_helper<'a>(
         split_ids: &[&'a str],
-        metadata_set: &mut MetadataSet,
+        metadata_set: &mut MetadataSet
     ) -> MetastoreResult<()> {
         for &split_id in split_ids {
             // Check for the existence of split.
             let mut metadata = metadata_set.splits.get_mut(split_id).ok_or_else(|| {
                 MetastoreError::SplitDoesNotExist {
-                    split_id: split_id.to_string(),
+                    split_id: split_id.to_string()
                 }
             })?;
 
@@ -202,7 +198,7 @@ impl SingleFileMetastore {
                 }
                 _ => {
                     return Err(MetastoreError::SplitIsNotStaged {
-                        split_id: split_id.to_string(),
+                        split_id: split_id.to_string()
                     })
                 }
             }
@@ -214,14 +210,14 @@ impl SingleFileMetastore {
     /// Helper to mark a list of splits as deleted.
     fn mark_splits_as_deleted_helper<'a>(
         split_ids: &[&'a str],
-        metadata_set: &mut MetadataSet,
+        metadata_set: &mut MetadataSet
     ) -> MetastoreResult<bool> {
         let mut is_modified = false;
         for &split_id in split_ids {
             // Check for the existence of split.
             let metadata = metadata_set.splits.get_mut(split_id).ok_or_else(|| {
                 MetastoreError::SplitDoesNotExist {
-                    split_id: split_id.to_string(),
+                    split_id: split_id.to_string()
                 }
             })?;
 
@@ -247,13 +243,13 @@ impl Metastore for SingleFileMetastore {
 
         if exists {
             return Err(MetastoreError::IndexAlreadyExists {
-                index_id: index_metadata.index_id.clone(),
+                index_id: index_metadata.index_id.clone()
             });
         }
 
         let metadata_set = MetadataSet {
             index: index_metadata,
-            splits: HashMap::new(),
+            splits: HashMap::new()
         };
         self.put_index(metadata_set).await?;
 
@@ -266,7 +262,7 @@ impl Metastore for SingleFileMetastore {
 
         if !exists {
             return Err(MetastoreError::IndexDoesNotExist {
-                index_id: index_id.to_string(),
+                index_id: index_id.to_string()
             });
         }
 
@@ -278,15 +274,15 @@ impl Metastore for SingleFileMetastore {
             .await
             .map_err(|storage_err| match storage_err.kind() {
                 StorageErrorKind::DoesNotExist => MetastoreError::IndexDoesNotExist {
-                    index_id: index_id.to_string(),
+                    index_id: index_id.to_string()
                 },
                 StorageErrorKind::Unauthorized => MetastoreError::Forbidden {
-                    message: "The request credentials do not allow for this operation.".to_string(),
+                    message: "The request credentials do not allow for this operation.".to_string()
                 },
                 _ => MetastoreError::InternalError {
                     message: "Failed to delete metadata set from storage.".to_string(),
-                    cause: anyhow::anyhow!(storage_err),
-                },
+                    cause: anyhow::anyhow!(storage_err)
+                }
             })?;
 
         // Update the internal data if the storage is successfully updated.
@@ -299,7 +295,7 @@ impl Metastore for SingleFileMetastore {
     async fn stage_split(
         &self,
         index_id: &str,
-        mut metadata: SplitMetadataAndFooterOffsets,
+        mut metadata: SplitMetadataAndFooterOffsets
     ) -> MetastoreResult<()> {
         let mut metadata_set = self.get_index(index_id).await?;
 
@@ -314,7 +310,7 @@ impl Metastore for SingleFileMetastore {
                     "Try to stage split that already exists ({})",
                     metadata.split_metadata.split_id
                 ),
-                cause: anyhow::anyhow!(""),
+                cause: anyhow::anyhow!("")
             });
         }
 
@@ -334,7 +330,7 @@ impl Metastore for SingleFileMetastore {
         &self,
         index_id: &str,
         split_ids: &[&'a str],
-        checkpoint_delta: CheckpointDelta,
+        checkpoint_delta: CheckpointDelta
     ) -> MetastoreResult<()> {
         let mut metadata_set = self.get_index(index_id).await?;
         metadata_set
@@ -351,7 +347,7 @@ impl Metastore for SingleFileMetastore {
         &self,
         index_id: &str,
         new_split_ids: &[&'a str],
-        replaced_split_ids: &[&'a str],
+        replaced_split_ids: &[&'a str]
     ) -> MetastoreResult<()> {
         let mut metadata_set = self.get_index(index_id).await?;
 
@@ -370,16 +366,16 @@ impl Metastore for SingleFileMetastore {
         index_id: &str,
         state: SplitState,
         time_range_opt: Option<Range<i64>>,
-        tags: &[String],
+        tags: &[String]
     ) -> MetastoreResult<Vec<SplitMetadataAndFooterOffsets>> {
         let time_range_filter = |split_metadata: &SplitMetadata| match (
             time_range_opt.as_ref(),
-            split_metadata.time_range.as_ref(),
+            split_metadata.time_range.as_ref()
         ) {
             (Some(filter_time_range), Some(split_time_range)) => {
                 !is_disjoint(filter_time_range, split_time_range)
             }
-            _ => true, // Return `true` if `time_range` is omitted or the split has no time range.
+            _ => true // Return `true` if `time_range` is omitted or the split has no time range.
         };
 
         let tag_filter = |split_metadata: &SplitMetadata| {
@@ -409,7 +405,7 @@ impl Metastore for SingleFileMetastore {
 
     async fn list_all_splits(
         &self,
-        index_id: &str,
+        index_id: &str
     ) -> MetastoreResult<Vec<SplitMetadataAndFooterOffsets>> {
         let metadata_set = self.get_index(index_id).await?;
         let splits = metadata_set.splits.into_values().collect();
@@ -419,7 +415,7 @@ impl Metastore for SingleFileMetastore {
     async fn mark_splits_as_deleted<'a>(
         &self,
         index_id: &str,
-        split_ids: &[&'a str],
+        split_ids: &[&'a str]
     ) -> MetastoreResult<()> {
         let mut metadata_set = self.get_index(index_id).await?;
 
@@ -435,7 +431,7 @@ impl Metastore for SingleFileMetastore {
     async fn delete_splits<'a>(
         &self,
         index_id: &str,
-        split_ids: &[&'a str],
+        split_ids: &[&'a str]
     ) -> MetastoreResult<()> {
         let mut metadata_set = self.get_index(index_id).await?;
 
@@ -443,7 +439,7 @@ impl Metastore for SingleFileMetastore {
             // Check for the existence of split.
             let metadata = metadata_set.splits.get_mut(split_id).ok_or_else(|| {
                 MetastoreError::SplitDoesNotExist {
-                    split_id: split_id.to_string(),
+                    split_id: split_id.to_string()
                 }
             })?;
 
@@ -480,13 +476,13 @@ impl Metastore for SingleFileMetastore {
 /// A single file metastore factory
 #[derive(Clone)]
 pub struct SingleFileMetastoreFactory {
-    storage_uri_resolver: StorageUriResolver,
+    storage_uri_resolver: StorageUriResolver
 }
 
 impl Default for SingleFileMetastoreFactory {
     fn default() -> Self {
         SingleFileMetastoreFactory {
-            storage_uri_resolver: quickwit_storage_uri_resolver().clone(),
+            storage_uri_resolver: quickwit_storage_uri_resolver().clone()
         }
     }
 }
@@ -508,7 +504,7 @@ impl MetastoreFactory for SingleFileMetastoreFactory {
                     MetastoreResolverError::FailedToOpenMetastore(MetastoreError::InternalError {
                         message: "Failed to open storage hosting the single file metastore."
                             .to_string(),
-                        cause: anyhow::anyhow!("StorageError {:?}: {}.", kind, message),
+                        cause: anyhow::anyhow!("StorageError {:?}: {}.", kind, message)
                     })
                 }
             })?;
@@ -552,7 +548,7 @@ mod tests {
                 index_id: index_id.to_string(),
                 index_uri: "ram://indexes/my-index".to_string(),
                 index_config: Arc::new(AllFlattenIndexConfig::default()),
-                checkpoint: Checkpoint::default(),
+                checkpoint: Checkpoint::default()
             };
 
             // Create index
@@ -580,7 +576,7 @@ mod tests {
                 index_id: index_id.to_string(),
                 index_uri: "ram://indexes/my-index".to_string(),
                 index_config: Arc::new(AllFlattenIndexConfig::default()),
-                checkpoint: Checkpoint::default(),
+                checkpoint: Checkpoint::default()
             };
 
             // Create index

@@ -1,63 +1,51 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::actors::Indexer;
-use crate::actors::IndexerParams;
-use crate::actors::Packager;
-use crate::actors::Publisher;
-use crate::actors::Uploader;
-use crate::models::IndexingStatistics;
-use crate::source::quickwit_supported_sources;
-use crate::source::SourceActor;
-use crate::source::SourceConfig;
+use std::sync::Arc;
+use std::time::Duration;
+
 use async_trait::async_trait;
-use quickwit_actors::Actor;
-use quickwit_actors::ActorContext;
-use quickwit_actors::ActorExitStatus;
-use quickwit_actors::ActorHandle;
-use quickwit_actors::AsyncActor;
-use quickwit_actors::Health;
-use quickwit_actors::KillSwitch;
-use quickwit_actors::Supervisable;
+use quickwit_actors::{
+    Actor, ActorContext, ActorExitStatus, ActorHandle, AsyncActor, Health, KillSwitch, Supervisable
+};
 use quickwit_metastore::Metastore;
 use quickwit_storage::StorageUriResolver;
 use smallvec::SmallVec;
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::join;
-use tracing::debug;
-use tracing::error;
-use tracing::info;
+use tracing::{debug, error, info};
+
+use crate::actors::{Indexer, IndexerParams, Packager, Publisher, Uploader};
+use crate::models::IndexingStatistics;
+use crate::source::{quickwit_supported_sources, SourceActor, SourceConfig};
 
 pub struct IndexingPipelineHandler {
     pub source: ActorHandle<SourceActor>,
     pub indexer: ActorHandle<Indexer>,
     pub packager: ActorHandle<Packager>,
     pub uploader: ActorHandle<Uploader>,
-    pub publisher: ActorHandle<Publisher>,
+    pub publisher: ActorHandle<Publisher>
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum Msg {
     Supervise,
-    Observe,
+    Observe
 }
 
 /// TODO have a clear strategy on when we should retry, and when we should not.
@@ -66,7 +54,7 @@ pub struct IndexingPipelineSupervisor {
     previous_generations_statistics: IndexingStatistics,
     statistics: IndexingStatistics,
     handlers: Option<IndexingPipelineHandler>,
-    kill_switch: KillSwitch,
+    kill_switch: KillSwitch
 }
 
 impl Actor for IndexingPipelineSupervisor {
@@ -86,7 +74,7 @@ impl IndexingPipelineSupervisor {
             previous_generations_statistics: Default::default(),
             handlers: None,
             kill_switch: KillSwitch::default(),
-            statistics: IndexingStatistics::default(),
+            statistics: IndexingStatistics::default()
         }
     }
 
@@ -103,7 +91,7 @@ impl IndexingPipelineSupervisor {
                 .add_actor_counters(
                     &*indexer_counters,
                     &*uploader_counters,
-                    &*publisher_counters,
+                    &*publisher_counters
                 );
         }
         ctx.schedule_self_msg(Duration::from_secs(1), Msg::Observe)
@@ -118,7 +106,7 @@ impl IndexingPipelineSupervisor {
                 &handlers.indexer,
                 &handlers.packager,
                 &handlers.uploader,
-                &handlers.publisher,
+                &handlers.publisher
             ])
         } else {
             SmallVec::new()
@@ -182,7 +170,7 @@ impl IndexingPipelineSupervisor {
         let uploader = Uploader::new(
             self.params.metastore.clone(),
             index_storage,
-            publisher_mailbox,
+            publisher_mailbox
         );
         let (uploader_mailbox, uploader_handler) =
             ctx.spawn_async(uploader, self.kill_switch.clone());
@@ -194,7 +182,7 @@ impl IndexingPipelineSupervisor {
             self.params.index_id.clone(),
             index_metadata.index_config.clone(),
             self.params.indexer_params.clone(),
-            packager_mailbox,
+            packager_mailbox
         )?;
         let (indexer_mailbox, indexer_handler) = ctx.spawn_sync(indexer, self.kill_switch.clone());
         let source = quickwit_supported_sources()
@@ -202,7 +190,7 @@ impl IndexingPipelineSupervisor {
             .await?;
         let actor_source = SourceActor {
             source,
-            batch_sink: indexer_mailbox,
+            batch_sink: indexer_mailbox
         };
         let (_source_mailbox, source_handler) =
             ctx.spawn_async(actor_source, self.kill_switch.clone());
@@ -211,7 +199,7 @@ impl IndexingPipelineSupervisor {
             indexer: indexer_handler,
             packager: packager_handler,
             uploader: uploader_handler,
-            publisher: publisher_handler,
+            publisher: publisher_handler
         });
         Ok(())
     }
@@ -221,9 +209,9 @@ impl IndexingPipelineSupervisor {
             // TODO Accept errors in spawning. See #463.
             self.spawn_pipeline(ctx).await?;
             // if let Err(spawn_error) = self.spawn_pipeline(ctx).await {
-            //     // only retry n-times.
-            //     error!(err=?spawn_error, "Error while spawning");
-            //     self.terminate().await;
+            //    // only retry n-times.
+            //    error!(err=?spawn_error, "Error while spawning");
+            //    self.terminate().await;
             // }
         } else {
             match self.healthcheck() {
@@ -258,7 +246,7 @@ impl IndexingPipelineSupervisor {
 impl AsyncActor for IndexingPipelineSupervisor {
     async fn initialize(
         &mut self,
-        ctx: &ActorContext<Self::Message>,
+        ctx: &ActorContext<Self::Message>
     ) -> Result<(), ActorExitStatus> {
         self.process_observe(ctx).await?;
         self.process_supervise(ctx).await?;
@@ -269,11 +257,11 @@ impl AsyncActor for IndexingPipelineSupervisor {
         &mut self,
         message: Self::Message,
 
-        ctx: &ActorContext<Self::Message>,
+        ctx: &ActorContext<Self::Message>
     ) -> Result<(), ActorExitStatus> {
         match message {
             Msg::Observe => self.process_observe(ctx).await?,
-            Msg::Supervise => self.process_supervise(ctx).await?,
+            Msg::Supervise => self.process_supervise(ctx).await?
         }
         Ok(())
     }
@@ -284,25 +272,23 @@ pub struct IndexingPipelineParams {
     pub source_config: SourceConfig,
     pub indexer_params: IndexerParams,
     pub metastore: Arc<dyn Metastore>,
-    pub storage_uri_resolver: StorageUriResolver,
+    pub storage_uri_resolver: StorageUriResolver
 }
 
 #[cfg(test)]
 mod tests {
 
-    use super::IndexingPipelineParams;
-    use super::IndexingPipelineSupervisor;
-    use crate::actors::IndexerParams;
-    use crate::source::SourceConfig;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    use quickwit_actors::Universe;
+    use quickwit_metastore::{IndexMetadata, MockMetastore, SplitState};
     use quickwit_storage::StorageUriResolver;
     use serde_json::json;
 
-    use quickwit_actors::Universe;
-    use quickwit_metastore::IndexMetadata;
-    use quickwit_metastore::MockMetastore;
-    use quickwit_metastore::SplitState;
-    use std::path::PathBuf;
-    use std::sync::Arc;
+    use super::{IndexingPipelineParams, IndexingPipelineSupervisor};
+    use crate::actors::IndexerParams;
+    use crate::source::SourceConfig;
 
     #[tokio::test]
     async fn test_indexing_pipeline() -> anyhow::Result<()> {
@@ -317,7 +303,7 @@ mod tests {
                     index_id: "test-index".to_string(),
                     index_uri: "ram://test-index".to_string(),
                     index_config: Arc::new(quickwit_index_config::default_config_for_tests()),
-                    checkpoint: Default::default(),
+                    checkpoint: Default::default()
                 };
                 Ok(index_metadata)
             });
@@ -342,7 +328,7 @@ mod tests {
         let source_config = SourceConfig {
             id: "test-source".to_string(),
             source_type: "file".to_string(),
-            params: json!({ "filepath": PathBuf::from("data/test_corpus.json") }),
+            params: json!({ "filepath": PathBuf::from("data/test_corpus.json") })
         };
         let indexer_params = IndexerParams::for_test()?;
         let indexing_pipeline_params = IndexingPipelineParams {
@@ -350,7 +336,7 @@ mod tests {
             source_config,
             indexer_params,
             metastore: Arc::new(metastore),
-            storage_uri_resolver: StorageUriResolver::for_test(),
+            storage_uri_resolver: StorageUriResolver::for_test()
         };
         let indexing_supervisor = IndexingPipelineSupervisor::new(indexing_pipeline_params);
         let (_pipeline_mailbox, pipeline_handler) = universe.spawn_async_actor(indexing_supervisor);

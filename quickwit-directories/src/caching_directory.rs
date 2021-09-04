@@ -1,35 +1,31 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+use std::ops::{Deref, Range};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::{fmt, io};
 
 use async_trait::async_trait;
 use bytes::Bytes;
 use quickwit_storage::SliceCache;
 use stable_deref_trait::StableDeref;
-use std::fmt;
-use std::io;
-use std::ops::Deref;
-use std::ops::Range;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use tantivy::directory::error::{DeleteError, OpenReadError, OpenWriteError};
 use tantivy::directory::{FileHandle, OwnedBytes, WatchHandle, WritePtr};
 use tantivy::{AsyncIoResult, Directory, HasLen};
@@ -39,7 +35,7 @@ use tantivy::{AsyncIoResult, Directory, HasLen};
 pub struct CachingDirectory {
     underlying: Arc<dyn Directory>,
     // TODO fixme: that's a pretty ugly cache we have here.
-    cache: Arc<SliceCache>,
+    cache: Arc<SliceCache>
 }
 
 impl CachingDirectory {
@@ -56,11 +52,11 @@ impl CachingDirectory {
     /// In that case, the read payload will not be saved in the cache.
     pub fn new_with_capacity_in_bytes(
         underlying: Arc<dyn Directory>,
-        capacity_in_bytes: usize,
+        capacity_in_bytes: usize
     ) -> CachingDirectory {
         CachingDirectory {
             underlying,
-            cache: Arc::new(SliceCache::with_capacity_in_bytes(capacity_in_bytes)),
+            cache: Arc::new(SliceCache::with_capacity_in_bytes(capacity_in_bytes))
         }
     }
 
@@ -72,7 +68,7 @@ impl CachingDirectory {
     pub fn new_with_unlimited_capacity(underlying: Arc<dyn Directory>) -> CachingDirectory {
         CachingDirectory {
             underlying,
-            cache: Arc::new(SliceCache::with_infinite_capacity()),
+            cache: Arc::new(SliceCache::with_infinite_capacity())
         }
     }
 }
@@ -86,7 +82,7 @@ impl fmt::Debug for CachingDirectory {
 struct CachingFileHandle {
     path: PathBuf,
     cache: Arc<SliceCache>,
-    underlying_filehandle: Box<dyn FileHandle>,
+    underlying_filehandle: Box<dyn FileHandle>
 }
 
 impl fmt::Debug for CachingFileHandle {
@@ -120,7 +116,7 @@ impl FileHandle for CachingFileHandle {
         self.cache.put(
             self.path.to_path_buf(),
             byte_range,
-            Bytes::from(owned_bytes.to_vec()),
+            Bytes::from(owned_bytes.to_vec())
         );
         Ok(owned_bytes)
     }
@@ -136,7 +132,7 @@ impl FileHandle for CachingFileHandle {
         self.cache.put(
             self.path.clone(),
             byte_range,
-            Bytes::from(read_bytes.to_vec()),
+            Bytes::from(read_bytes.to_vec())
         );
         Ok(read_bytes)
     }
@@ -155,13 +151,13 @@ impl Directory for CachingDirectory {
 
     fn get_file_handle(
         &self,
-        path: &Path,
+        path: &Path
     ) -> std::result::Result<Box<dyn FileHandle>, OpenReadError> {
         let underlying_filehandle = self.underlying.get_file_handle(path)?;
         let caching_file_handle = CachingFileHandle {
             path: path.to_path_buf(),
             cache: self.cache.clone(),
-            underlying_filehandle,
+            underlying_filehandle
         };
         Ok(Box::new(caching_file_handle))
     }
@@ -189,7 +185,7 @@ impl Directory for CachingDirectory {
 
     fn watch(
         &self,
-        _watch_callback: tantivy::directory::WatchCallback,
+        _watch_callback: tantivy::directory::WatchCallback
     ) -> tantivy::Result<WatchHandle> {
         Ok(WatchHandle::empty())
     }
@@ -198,12 +194,14 @@ impl Directory for CachingDirectory {
 #[cfg(test)]
 mod tests {
 
-    use super::CachingDirectory;
-    use crate::DebugProxyDirectory;
     use std::path::Path;
     use std::sync::Arc;
+
     use tantivy::directory::RamDirectory;
     use tantivy::Directory;
+
+    use super::CachingDirectory;
+    use crate::DebugProxyDirectory;
 
     #[test]
     fn test_caching_directory() -> tantivy::Result<()> {

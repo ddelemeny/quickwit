@@ -1,29 +1,27 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+use std::fmt::Display;
+use std::time::Duration;
 
 use futures::Future;
 use rand::Rng;
-use std::fmt::Display;
-use std::time::Duration;
 use tracing::{debug, warn};
 
 const MAX_RETRY_ATTEMPTS: usize = 30;
@@ -39,14 +37,14 @@ pub trait IsRetryable {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Retry<E> {
     Retryable(E),
-    NotRetryable(E),
+    NotRetryable(E)
 }
 
 impl<E> Retry<E> {
     pub fn into_inner(self) -> E {
         match self {
             Self::Retryable(e) => e,
-            Self::NotRetryable(e) => e,
+            Self::NotRetryable(e) => e
         }
     }
 }
@@ -68,19 +66,19 @@ impl<E> IsRetryable for Retry<E> {
     fn is_retryable(&self) -> bool {
         match self {
             Retry::Retryable(_) => true,
-            Retry::NotRetryable(_) => false,
+            Retry::NotRetryable(_) => false
         }
     }
 }
 
 // TODO define retry strategy
-/// Retry with exponential backoff and full jitter. Implementation and default values originate from the Java SDK.
-/// See also: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/.
+/// Retry with exponential backoff and full jitter. Implementation and default values originate from
+/// the Java SDK. See also: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/.
 pub async fn retry<F, U, E, Fut>(f: F) -> Result<U, E>
 where
     F: Fn() -> Fut,
     Fut: Future<Output = Result<U, E>>,
-    E: IsRetryable + Display + 'static,
+    E: IsRetryable + Display + 'static
 {
     let mut attempt_count = 0;
 

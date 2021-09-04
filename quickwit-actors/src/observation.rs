@@ -1,22 +1,21 @@
-//  Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::fmt;
 use std::ops::Deref;
@@ -24,7 +23,7 @@ use std::ops::Deref;
 #[derive(Debug)]
 pub struct Observation<ObservableState> {
     pub obs_type: ObservationType,
-    pub state: ObservableState,
+    pub state: ObservableState
 }
 
 impl<ObservableState> Deref for Observation<ObservableState> {
@@ -46,7 +45,7 @@ pub enum ObservationType {
     /// as soon as it has finished processing the current message.
     Timeout,
     /// The actor has exited. The post-mortem state is joined.
-    PostMortem,
+    PostMortem
 }
 
 impl<State: fmt::Debug + PartialEq> PartialEq for Observation<State> {

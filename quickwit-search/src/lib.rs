@@ -1,23 +1,21 @@
-/*
- * Copyright (C) 2021 Quickwit Inc.
- *
- * Quickwit is offered under the AGPL v3.0 and as commercial software.
- * For commercial licensing, contact us at hello@quickwit.io.
- *
- * AGPL:
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 //! This projects implements quickwit's search API.
 #![warn(missing_docs)]
@@ -36,7 +34,6 @@ mod search_result_json;
 mod search_stream;
 mod service;
 
-///
 /// Refer to this as `crate::Result<T>`.
 pub type Result<T> = std::result::Result<T, SearchError>;
 
@@ -45,16 +42,12 @@ use std::net::SocketAddr;
 use std::ops::Range;
 
 use anyhow::Context;
+use quickwit_metastore::{Metastore, MetastoreResult, SplitMetadataAndFooterOffsets, SplitState};
+use quickwit_proto::{PartialHit, SearchRequest, SearchResult, SplitIdAndFooterOffsets};
+use quickwit_storage::StorageUriResolver;
 use tantivy::DocAddress;
 
-use quickwit_metastore::SplitState;
-use quickwit_metastore::{Metastore, MetastoreResult, SplitMetadataAndFooterOffsets};
-use quickwit_proto::{PartialHit, SearchResult};
-use quickwit_proto::{SearchRequest, SplitIdAndFooterOffsets};
-use quickwit_storage::StorageUriResolver;
-
-pub use crate::client::create_search_service_client;
-pub use crate::client::SearchServiceClient;
+pub use crate::client::{create_search_service_client, SearchServiceClient};
 pub use crate::client_pool::search_client_pool::SearchClientPool;
 pub use crate::client_pool::ClientPool;
 pub use crate::error::SearchError;
@@ -63,8 +56,7 @@ use crate::leaf::leaf_search;
 pub use crate::root::root_search;
 pub use crate::search_result_json::SearchResultJson;
 pub use crate::search_stream::root_search_stream;
-pub use crate::service::MockSearchService;
-pub use crate::service::{SearchService, SearchServiceImpl};
+pub use crate::service::{MockSearchService, SearchService, SearchServiceImpl};
 
 /// Compute the SWIM port from the HTTP port.
 /// Add 1 to the HTTP port to get the SWIM port.
@@ -88,7 +80,7 @@ pub fn swim_addr_to_grpc_addr(swim_addr: SocketAddr) -> SocketAddr {
 #[derive(Clone, Copy, Eq, Debug, PartialEq, Hash, Ord, PartialOrd)]
 pub(crate) struct GlobalDocAddress<'a> {
     pub split: &'a str,
-    pub doc_addr: DocAddress,
+    pub doc_addr: DocAddress
 }
 
 impl<'a> GlobalDocAddress<'a> {
@@ -97,8 +89,8 @@ impl<'a> GlobalDocAddress<'a> {
             split: &partial_hit.split_id,
             doc_addr: DocAddress {
                 segment_ord: partial_hit.segment_ord,
-                doc_id: partial_hit.doc_id,
-            },
+                doc_id: partial_hit.doc_id
+            }
         }
     }
 }
@@ -106,7 +98,7 @@ impl<'a> GlobalDocAddress<'a> {
 fn partial_hit_sorting_key(partial_hit: &PartialHit) -> (Reverse<u64>, GlobalDocAddress) {
     (
         Reverse(partial_hit.sorting_field_value),
-        GlobalDocAddress::from_partial_hit(partial_hit),
+        GlobalDocAddress::from_partial_hit(partial_hit)
     )
 }
 
@@ -114,22 +106,22 @@ fn extract_time_range(search_request: &SearchRequest) -> Option<Range<i64>> {
     match (search_request.start_timestamp, search_request.end_timestamp) {
         (Some(start_timestamp), Some(end_timestamp)) => Some(Range {
             start: start_timestamp,
-            end: end_timestamp,
+            end: end_timestamp
         }),
         (_, Some(end_timestamp)) => Some(Range {
             start: i64::MIN,
-            end: end_timestamp,
+            end: end_timestamp
         }),
         (Some(start_timestamp), _) => Some(Range {
             start: start_timestamp,
-            end: i64::MAX,
+            end: i64::MAX
         }),
-        _ => None,
+        _ => None
     }
 }
 
 fn extract_split_and_footer_offsets(
-    split_metadata_and_footer_offsets: &SplitMetadataAndFooterOffsets,
+    split_metadata_and_footer_offsets: &SplitMetadataAndFooterOffsets
 ) -> SplitIdAndFooterOffsets {
     SplitIdAndFooterOffsets {
         split_id: split_metadata_and_footer_offsets
@@ -137,14 +129,14 @@ fn extract_split_and_footer_offsets(
             .split_id
             .clone(),
         split_footer_start: split_metadata_and_footer_offsets.footer_offsets.start as u64,
-        split_footer_end: split_metadata_and_footer_offsets.footer_offsets.end as u64,
+        split_footer_end: split_metadata_and_footer_offsets.footer_offsets.end as u64
     }
 }
 
 /// Extract the list of relevant splits for a given search request.
 async fn list_relevant_splits(
     search_request: &SearchRequest,
-    metastore: &dyn Metastore,
+    metastore: &dyn Metastore
 ) -> MetastoreResult<Vec<SplitMetadataAndFooterOffsets>> {
     let time_range_opt = extract_time_range(search_request);
     let split_metas = metastore
@@ -152,7 +144,7 @@ async fn list_relevant_splits(
             &search_request.index_id,
             SplitState::Published,
             time_range_opt,
-            &search_request.tags,
+            &search_request.tags
         )
         .await?;
     Ok(split_metas)
@@ -163,7 +155,7 @@ async fn list_relevant_splits(
 pub async fn single_node_search(
     search_request: &SearchRequest,
     metastore: &dyn Metastore,
-    storage_resolver: StorageUriResolver,
+    storage_resolver: StorageUriResolver
 ) -> Result<SearchResult> {
     let start_instant = tokio::time::Instant::now();
     let index_metadata = metastore.index_metadata(&search_request.index_id).await?;
@@ -176,14 +168,14 @@ pub async fn single_node_search(
         search_request,
         index_storage.clone(),
         &split_metadata[..],
-        index_config,
+        index_config
     )
     .await
     .with_context(|| "leaf_search")?;
     let fetch_docs_result = fetch_docs(
         leaf_search_result.partial_hits,
         index_storage,
-        &split_metadata,
+        &split_metadata
     )
     .await
     .with_context(|| "fetch_request")?;
@@ -192,7 +184,7 @@ pub async fn single_node_search(
         num_hits: leaf_search_result.num_hits,
         hits: fetch_docs_result.hits,
         elapsed_time_micros: elapsed.as_micros() as u64,
-        errors: vec![],
+        errors: vec![]
     })
 }
 
@@ -203,9 +195,9 @@ mod tests {
     use assert_json_diff::assert_json_include;
     use quickwit_core::TestSandbox;
     use quickwit_index_config::{DefaultIndexConfigBuilder, WikipediaIndexConfig};
+    use serde_json::json;
 
     use super::*;
-    use serde_json::json;
 
     #[tokio::test]
     async fn test_single_node_simple() -> anyhow::Result<()> {
@@ -225,12 +217,12 @@ mod tests {
             end_timestamp: None,
             max_hits: 2,
             start_offset: 0,
-            tags: vec![],
+            tags: vec![]
         };
         let single_node_result = single_node_search(
             &search_request,
             &*test_sandbox.metastore(),
-            test_sandbox.storage_uri_resolver(),
+            test_sandbox.storage_uri_resolver()
         )
         .await?;
         assert_eq!(single_node_result.num_hits, 1);
@@ -245,9 +237,7 @@ mod tests {
 
     // TODO remove me once `Iterator::is_sorted_by_key` is stabilized.
     fn is_sorted<E, I: Iterator<Item = E>>(mut it: I) -> bool
-    where
-        E: Ord,
-    {
+    where E: Ord {
         let mut previous_el = if let Some(first_el) = it.next() {
             first_el
         } else {
@@ -282,12 +272,12 @@ mod tests {
             end_timestamp: None,
             max_hits: 6,
             start_offset: 0,
-            tags: vec![],
+            tags: vec![]
         };
         let single_node_result = single_node_search(
             &search_request,
             &*test_sandbox.metastore(),
-            test_sandbox.storage_uri_resolver(),
+            test_sandbox.storage_uri_resolver()
         )
         .await?;
         assert_eq!(single_node_result.num_hits, 20);
@@ -340,12 +330,12 @@ mod tests {
             end_timestamp: Some(20),
             max_hits: 15,
             start_offset: 0,
-            tags: vec![],
+            tags: vec![]
         };
         let single_node_result = single_node_search(
             &search_request,
             &*test_sandbox.metastore(),
-            test_sandbox.storage_uri_resolver(),
+            test_sandbox.storage_uri_resolver()
         )
         .await?;
         assert_eq!(single_node_result.num_hits, 10);
@@ -362,12 +352,12 @@ mod tests {
             end_timestamp: Some(20),
             max_hits: 25,
             start_offset: 0,
-            tags: vec![],
+            tags: vec![]
         };
         let single_node_result = single_node_search(
             &search_request,
             &*test_sandbox.metastore(),
-            test_sandbox.storage_uri_resolver(),
+            test_sandbox.storage_uri_resolver()
         )
         .await?;
         assert_eq!(single_node_result.num_hits, 19);
@@ -384,12 +374,12 @@ mod tests {
             end_timestamp: None,
             max_hits: 25,
             start_offset: 0,
-            tags: vec!["foo".to_string()],
+            tags: vec!["foo".to_string()]
         };
         let single_node_result = single_node_search(
             &search_request,
             &*test_sandbox.metastore(),
-            test_sandbox.storage_uri_resolver(),
+            test_sandbox.storage_uri_resolver()
         )
         .await?;
         assert_eq!(single_node_result.num_hits, 0);

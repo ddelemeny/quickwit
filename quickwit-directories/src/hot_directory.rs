@@ -1,40 +1,37 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+use std::collections::{HashMap, HashSet};
+use std::ops::Range;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::{fmt, io};
 
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::fmt;
-use std::io;
-use std::ops::Range;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use tantivy::directory::error::{LockError, OpenReadError};
-use tantivy::directory::DirectoryLock;
-use tantivy::directory::{FileSlice, OwnedBytes, WatchCallback};
+use tantivy::directory::{
+    DirectoryLock, FileHandle, FileSlice, OwnedBytes, WatchCallback, WatchHandle
+};
 use tantivy::error::DataCorruption;
-use tantivy::{directory::FileHandle, directory::WatchHandle, HasLen};
-use tantivy::{AsyncIoResult, Directory, Index, IndexReader, ReloadPolicy};
+use tantivy::{AsyncIoResult, Directory, HasLen, Index, IndexReader, ReloadPolicy};
 
 use crate::caching_directory::BytesWrapper;
 use crate::{CachingDirectory, DebugProxyDirectory};
@@ -43,7 +40,7 @@ use crate::{CachingDirectory, DebugProxyDirectory};
 struct SliceCacheIndexEntry {
     start: usize, //< legacy. We keep this instead of range due to existing indices.
     stop: usize,
-    addr: usize,
+    addr: usize
 }
 
 impl SliceCacheIndexEntry {
@@ -59,7 +56,7 @@ impl SliceCacheIndexEntry {
 #[derive(Serialize, Deserialize, Default)]
 pub struct SliceCacheIndex {
     total_len: u64,
-    slices: Vec<SliceCacheIndexEntry>,
+    slices: Vec<SliceCacheIndexEntry>
 }
 impl SliceCacheIndex {
     pub fn is_complete(&self) -> bool {
@@ -78,7 +75,7 @@ impl SliceCacheIndex {
             Err(0) => {
                 return None;
             }
-            Err(idx_after) => (idx_after - 1),
+            Err(idx_after) => (idx_after - 1)
         };
         let entry = &self.slices[entry_idx];
         if entry.range().start > byte_range.start || entry.range().end < byte_range.end {
@@ -91,7 +88,7 @@ impl SliceCacheIndex {
 #[derive(Default)]
 struct StaticDirectoryCacheBuilder {
     file_cache_builder: HashMap<PathBuf, StaticSliceCacheBuilder>,
-    file_lengths: HashMap<PathBuf, u64>, // a mapping from file path to file size in bytes
+    file_lengths: HashMap<PathBuf, u64> // a mapping from file path to file size in bytes
 }
 
 impl StaticDirectoryCacheBuilder {
@@ -130,9 +127,7 @@ impl StaticDirectoryCacheBuilder {
 }
 
 fn deserialize_cbor<T>(bytes: &mut OwnedBytes) -> serde_cbor::Result<T>
-where
-    T: serde::de::DeserializeOwned,
-{
+where T: serde::de::DeserializeOwned {
     let len = bytes.read_u64();
     let value = serde_cbor::from_reader(&bytes.as_slice()[..len as usize]);
     bytes.advance(len as usize);
@@ -142,7 +137,7 @@ where
 #[derive(Debug)]
 struct StaticDirectoryCache {
     file_lengths: HashMap<PathBuf, u64>,
-    slices: HashMap<PathBuf, Arc<StaticSliceCache>>,
+    slices: HashMap<PathBuf, Arc<StaticSliceCache>>
 }
 
 impl StaticDirectoryCache {
@@ -154,7 +149,7 @@ impl StaticDirectoryCache {
                 DataCorruption::comment_only(format!(
                     "Format version not supported: `{}`",
                     format_version
-                )),
+                ))
             ));
         }
 
@@ -175,7 +170,7 @@ impl StaticDirectoryCache {
 
         Ok(StaticDirectoryCache {
             file_lengths,
-            slices,
+            slices
         })
     }
 
@@ -191,14 +186,14 @@ impl StaticDirectoryCache {
 /// A SliceCache is a static toring
 pub struct StaticSliceCache {
     bytes: OwnedBytes,
-    index: SliceCacheIndex,
+    index: SliceCacheIndex
 }
 
 impl Default for StaticSliceCache {
     fn default() -> StaticSliceCache {
         StaticSliceCache {
             bytes: OwnedBytes::empty(),
-            index: SliceCacheIndex::default(),
+            index: SliceCacheIndex::default()
         }
     }
 }
@@ -244,7 +239,7 @@ struct StaticSliceCacheBuilder {
     wrt: Vec<u8>,
     slices: Vec<SliceCacheIndexEntry>,
     offset: u64,
-    total_len: u64,
+    total_len: u64
 }
 
 impl StaticSliceCacheBuilder {
@@ -253,7 +248,7 @@ impl StaticSliceCacheBuilder {
             wrt: Vec::new(),
             slices: Vec::new(),
             offset: 0u64,
-            total_len,
+            total_len
         }
     }
 
@@ -263,7 +258,7 @@ impl StaticSliceCacheBuilder {
         self.slices.push(SliceCacheIndexEntry {
             start,
             stop: end,
-            addr: self.offset as usize,
+            addr: self.offset as usize
         });
         self.offset += bytes.len() as u64;
     }
@@ -304,7 +299,7 @@ impl StaticSliceCacheBuilder {
         let merged_slices = merged_slices_res?;
         let slices_idx = SliceCacheIndex {
             total_len: self.total_len,
-            slices: merged_slices,
+            slices: merged_slices
         };
         serde_cbor::to_writer(&mut self.wrt, &slices_idx)
             .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
@@ -329,22 +324,22 @@ impl fmt::Debug for StaticSliceCache {
 /// hotcache.
 #[derive(Clone)]
 pub struct HotDirectory {
-    inner: Arc<InnerHotDirectory>,
+    inner: Arc<InnerHotDirectory>
 }
 
 impl HotDirectory {
     /// Wraps an index, with a static cache serialized into `hot_cache_bytes`.
     pub fn open<D: Directory>(
         underlying: D,
-        hot_cache_bytes: Bytes,
+        hot_cache_bytes: Bytes
     ) -> tantivy::Result<HotDirectory> {
         let static_cache =
             StaticDirectoryCache::open(OwnedBytes::new(BytesWrapper(hot_cache_bytes)))?;
         Ok(HotDirectory {
             inner: Arc::new(InnerHotDirectory {
                 underlying: Box::new(underlying),
-                cache: Arc::new(static_cache),
-            }),
+                cache: Arc::new(static_cache)
+            })
         })
     }
 }
@@ -352,7 +347,7 @@ impl HotDirectory {
 struct FileSliceWithCache {
     underlying: FileSlice,
     static_cache: Arc<StaticSliceCache>,
-    file_length: u64,
+    file_length: u64
 }
 
 #[async_trait]
@@ -386,7 +381,7 @@ impl HasLen for FileSliceWithCache {
 
 struct InnerHotDirectory {
     underlying: Box<dyn Directory>,
-    cache: Arc<StaticDirectoryCache>,
+    cache: Arc<StaticDirectoryCache>
 }
 
 impl fmt::Debug for HotDirectory {
@@ -412,7 +407,7 @@ impl Directory for HotDirectory {
         let file_slice_with_cache = FileSliceWithCache {
             underlying,
             static_cache: self.inner.cache.get_slice(path),
-            file_length,
+            file_length
         };
         Ok(Box::new(file_slice_with_cache))
     }
@@ -427,7 +422,7 @@ impl Directory for HotDirectory {
 
     fn open_write(
         &self,
-        path: &std::path::Path,
+        path: &std::path::Path
     ) -> Result<tantivy::directory::WritePtr, tantivy::directory::error::OpenWriteError> {
         self.inner.underlying.open_write(path)
     }
@@ -471,7 +466,7 @@ fn list_index_files(index: &Index) -> tantivy::Result<HashSet<PathBuf>> {
 /// See [`HotDirectory`] for more information.
 pub fn write_hotcache<D: Directory>(
     directory: D,
-    output: &mut dyn io::Write,
+    output: &mut dyn io::Write
 ) -> tantivy::Result<()> {
     // We use the caching directory here in order to defensively ensure that
     // the content of the directory that will be written in the hotcache is precisely
@@ -649,7 +644,7 @@ mod tests {
         let slice_entry = super::SliceCacheIndexEntry {
             start: 1,
             stop: 5,
-            addr: 4,
+            addr: 4
         };
         let bytes = serde_cbor::ser::to_vec(&slice_entry)?;
         assert_eq!(

@@ -1,26 +1,22 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use serde::ser::SerializeMap;
-use serde::Deserialize;
-use serde::Serialize;
 use std::cmp::Ordering;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
@@ -30,9 +26,11 @@ use std::num::ParseIntError;
 use std::ops::Range;
 use std::str::FromStr;
 use std::sync::Arc;
+
+use serde::ser::SerializeMap;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::info;
-use tracing::warn;
+use tracing::{info, warn};
 
 /// PartitionId identifies a partition for a given source.
 #[derive(Debug, Default, Clone, Eq, PartialEq, Ord, PartialOrd)]
@@ -120,14 +118,12 @@ impl<'a> From<&'a str> for Position {
 /// has been processed.
 #[derive(Default, Clone)]
 pub struct Checkpoint {
-    per_partition: BTreeMap<PartitionId, Position>,
+    per_partition: BTreeMap<PartitionId, Position>
 }
 
 impl Serialize for Checkpoint {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
+    where S: serde::Serializer {
         let mut map = serializer.serialize_map(Some(self.per_partition.len()))?;
         for (partition, position) in &self.per_partition {
             map.serialize_entry(&*partition.0, &*position.0)?;
@@ -138,9 +134,7 @@ impl Serialize for Checkpoint {
 
 impl<'de> Deserialize<'de> for Checkpoint {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
+    where D: serde::Deserializer<'de> {
         let string_to_string_map: BTreeMap<String, String> = BTreeMap::deserialize(deserializer)?;
         let per_partition: BTreeMap<PartitionId, Position> = string_to_string_map
             .into_iter()
@@ -156,14 +150,17 @@ impl<'de> Deserialize<'de> for Checkpoint {
 /// compatible. ie: the checkpoint delta starts from a point anterior to
 /// the checkpoint.
 #[derive(Error, Debug, PartialEq)]
-#[error("IncompatibleChkpt at partition: {partition_id:?} cur_pos:{current_position:?} delta_pos:{delta_position_from:?}")]
+#[error(
+    "IncompatibleChkpt at partition: {partition_id:?} cur_pos:{current_position:?} \
+     delta_pos:{delta_position_from:?}"
+)]
 pub struct IncompatibleCheckpoint {
     /// One PartitionId for which the incompatibility has been detected.
     pub partition_id: PartitionId,
     /// The current position within this partition.
     pub current_position: Position,
     /// The origin position for the delta.
-    pub delta_position_from: Position,
+    pub delta_position_from: Position
 }
 
 impl Checkpoint {
@@ -195,7 +192,7 @@ impl Checkpoint {
                     return Err(IncompatibleCheckpoint {
                         partition_id: delta_partition.clone(),
                         current_position: position.clone(),
-                        delta_position_from: delta_position.from.clone(),
+                        delta_position_from: delta_position.from.clone()
                     });
                 }
             }
@@ -212,16 +209,16 @@ impl Checkpoint {
     /// as gaps may happen. For instance, assuming a Kafka source, if the indexing
     /// pipeline is down for more than the retention period.
     ///
-    ///    |    Checkpoint & Delta        | Outcome                     |
-    ///    |------------------------------|-----------------------------|
-    ///    |  (..a] (b..c] with a = b     | Compatible                  |
-    ///    |  (..a] (b..c] with b > a     | Compatible                  |
-    ///    |  (..a] (b..c] with b < a     | Incompatible                |
+    ///   |    Checkpoint & Delta        | Outcome                     |
+    ///   |------------------------------|-----------------------------|
+    ///   |  (..a] (b..c] with a = b     | Compatible                  |
+    ///   |  (..a] (b..c] with b > a     | Compatible                  |
+    ///   |  (..a] (b..c] with b < a     | Incompatible                |
     ///
     /// If the delta is compatible, returns an error without modifying the original checkpoint.
     pub fn try_apply_delta(
         &mut self,
-        delta: CheckpointDelta,
+        delta: CheckpointDelta
     ) -> Result<(), IncompatibleCheckpoint> {
         self.check_compatibility(&delta)?;
         for (partition_id, partition_position) in delta.per_partition {
@@ -253,7 +250,7 @@ impl fmt::Debug for Checkpoint {
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct PartitionDelta {
     pub from: Position,
-    pub to: Position,
+    pub to: Position
 }
 
 /// A checkpoint delta represents a checkpoint update.
@@ -268,7 +265,7 @@ struct PartitionDelta {
 /// we are not trying to add records to the index that were already indexed.
 #[derive(Default, Clone, Eq, PartialEq)]
 pub struct CheckpointDelta {
-    per_partition: BTreeMap<PartitionId, PartitionDelta>,
+    per_partition: BTreeMap<PartitionId, PartitionDelta>
 }
 
 impl fmt::Debug for CheckpointDelta {
@@ -315,12 +312,12 @@ impl CheckpointDelta {
         &mut self,
         partition_id: PartitionId,
         from_position: Position,
-        to_position: Position,
+        to_position: Position
     ) {
         assert!(from_position <= to_position);
         let partition_delta = PartitionDelta {
             from: from_position,
-            to: to_position,
+            to: to_position
         };
         self.per_partition.insert(partition_id, partition_delta);
     }
@@ -339,7 +336,7 @@ impl CheckpointDelta {
                         return Err(IncompatibleCheckpoint {
                             partition_id: occupied_entry.key().clone(),
                             current_position: occupied_entry.get().to.clone(),
-                            delta_position_from: partition_delta.from,
+                            delta_position_from: partition_delta.from
                         });
                     }
                 }
@@ -379,12 +376,12 @@ mod tests {
             delta.add_partition(
                 PartitionId::from("a"),
                 Position::from(123u64),
-                Position::from(128u64),
+                Position::from(128u64)
             );
             delta.add_partition(
                 PartitionId::from("b"),
                 Position::from(60002u64),
-                Position::from(60187u64),
+                Position::from(60187u64)
             );
             delta
         };
@@ -403,12 +400,12 @@ mod tests {
             delta.add_partition(
                 PartitionId::from("a"),
                 Position::from("00123"),
-                Position::from("00128"),
+                Position::from("00128")
             );
             delta.add_partition(
                 PartitionId::from("b"),
                 Position::from("60002"),
-                Position::from("60187"),
+                Position::from("60187")
             );
             delta
         };
@@ -418,12 +415,12 @@ mod tests {
             delta.add_partition(
                 PartitionId::from("a"),
                 Position::from("00128"),
-                Position::from("00128"),
+                Position::from("00128")
             );
             delta.add_partition(
                 PartitionId::from("b"),
                 Position::from("50099"),
-                Position::from("60002"),
+                Position::from("60002")
             );
             delta
         };
@@ -443,12 +440,12 @@ mod tests {
             delta.add_partition(
                 PartitionId::from("a"),
                 Position::from("00123"),
-                Position::from("00128"),
+                Position::from("00128")
             );
             delta.add_partition(
                 PartitionId::from("b"),
                 Position::from("60002"),
-                Position::from("60187"),
+                Position::from("60187")
             );
             delta
         };
@@ -458,12 +455,12 @@ mod tests {
             delta.add_partition(
                 PartitionId::from("b"),
                 Position::from("60187"),
-                Position::from("60190"),
+                Position::from("60190")
             );
             delta.add_partition(
                 PartitionId::from("c"),
                 Position::from("20001"),
-                Position::from("20008"),
+                Position::from("20008")
             );
             delta
         };
@@ -478,12 +475,12 @@ mod tests {
             delta.add_partition(
                 PartitionId::from("a"),
                 Position::from("00123"),
-                Position::from("00128"),
+                Position::from("00128")
             );
             delta.add_partition(
                 PartitionId::from("b"),
                 Position::from("60002"),
-                Position::from("60187"),
+                Position::from("60187")
             );
             delta
         };
@@ -492,12 +489,12 @@ mod tests {
             delta.add_partition(
                 PartitionId::from("b"),
                 Position::from("60187"),
-                Position::from("60348"),
+                Position::from("60348")
             );
             delta.add_partition(
                 PartitionId::from("c"),
                 Position::from("20001"),
-                Position::from("20008"),
+                Position::from("20008")
             );
             delta
         };
@@ -506,17 +503,17 @@ mod tests {
             delta.add_partition(
                 PartitionId::from("a"),
                 Position::from("00123"),
-                Position::from("00128"),
+                Position::from("00128")
             );
             delta.add_partition(
                 PartitionId::from("b"),
                 Position::from("60002"),
-                Position::from("60348"),
+                Position::from("60348")
             );
             delta.add_partition(
                 PartitionId::from("c"),
                 Position::from("20001"),
-                Position::from("20008"),
+                Position::from("20008")
             );
             delta
         };
@@ -528,7 +525,7 @@ mod tests {
             delta.add_partition(
                 PartitionId::from("a"),
                 Position::from("00130"),
-                Position::from("00142"),
+                Position::from("00142")
             );
             delta
         };
@@ -538,7 +535,7 @@ mod tests {
             Err(IncompatibleCheckpoint {
                 partition_id: PartitionId::from("a"),
                 current_position: Position::from("00128"),
-                delta_position_from: Position::from("00130"),
+                delta_position_from: Position::from("00130")
             })
         );
         Ok(())

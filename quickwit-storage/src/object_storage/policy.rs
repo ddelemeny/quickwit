@@ -1,24 +1,21 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
-
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 /// The multipart policy defines when and how multipart upload / download should happen.
 ///
@@ -36,7 +33,7 @@ pub struct MultiPartPolicy {
     /// Maximum size allowed for an object.
     pub max_object_num_bytes: u64,
     /// Maximum number of part to be upload concurrently.
-    pub max_concurrent_upload: usize,
+    pub max_concurrent_upload: usize
 }
 
 impl MultiPartPolicy {
@@ -82,7 +79,7 @@ impl Default for MultiPartPolicy {
             multipart_threshold_num_bytes: 128 * 1_024 * 1_024, // 128 MiB
             max_num_parts: 10_000,
             max_object_num_bytes: 5_000_000_000_000u64, // S3 allows up to 5TB objects
-            max_concurrent_upload: 100,
+            max_concurrent_upload: 100
         }
     }
 }

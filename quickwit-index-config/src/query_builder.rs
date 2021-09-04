@@ -1,24 +1,21 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
-
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use quickwit_proto::SearchRequest;
 use tantivy::query::{Query, QueryParser, QueryParserError as TantivyQueryParserError};
@@ -32,7 +29,7 @@ use crate::QueryParserError;
 pub(crate) fn build_query(
     schema: Schema,
     request: &SearchRequest,
-    default_field_names: &[String],
+    default_field_names: &[String]
 ) -> Result<Box<dyn Query>, QueryParserError> {
     let user_input_ast = tantivy_query_grammar::parse_query(&request.query)
         .map_err(|_| TantivyQueryParserError::SyntaxError)?;
@@ -63,7 +60,7 @@ fn has_range_clause(user_input_ast: UserInputAst) -> bool {
             false
         }
         UserInputAst::Boost(ast, _) => has_range_clause(*ast),
-        UserInputAst::Leaf(leaf) => matches!(*leaf, UserInputLeaf::Range { .. }),
+        UserInputAst::Leaf(leaf) => matches!(*leaf, UserInputLeaf::Range { .. })
     }
 }
 
@@ -80,14 +77,14 @@ fn resolve_fields(schema: &Schema, field_names: &[String]) -> anyhow::Result<Vec
 
 #[cfg(test)]
 mod test {
-    use super::build_query;
-
     use quickwit_proto::SearchRequest;
     use tantivy::schema::{Schema, TEXT};
 
+    use super::build_query;
+
     enum TestExpectation {
         Err(&'static str),
-        Ok(&'static str),
+        Ok(&'static str)
     }
 
     fn make_schema() -> Schema {
@@ -103,7 +100,7 @@ mod test {
     fn check_build_query(
         query_str: &str,
         search_fields: Vec<String>,
-        expected: TestExpectation,
+        expected: TestExpectation
     ) -> anyhow::Result<()> {
         let request = SearchRequest {
             index_id: "test_index".to_string(),
@@ -113,7 +110,7 @@ mod test {
             end_timestamp: None,
             max_hits: 20,
             start_offset: 0,
-            tags: vec![],
+            tags: vec![]
         };
 
         let default_field_names = vec!["title".to_string(), "desc".to_string()];
@@ -137,51 +134,51 @@ mod test {
         check_build_query(
             "foo:bar",
             vec![],
-            TestExpectation::Err("Field does not exists: '\"foo\"'"),
+            TestExpectation::Err("Field does not exists: '\"foo\"'")
         )?;
         check_build_query(
             "title:[a TO b]",
             vec![],
-            TestExpectation::Err("Range queries are not currently allowed."),
+            TestExpectation::Err("Range queries are not currently allowed.")
         )?;
         check_build_query(
             "title:{a TO b} desc:foo",
             vec![],
-            TestExpectation::Err("Range queries are not currently allowed."),
+            TestExpectation::Err("Range queries are not currently allowed.")
         )?;
         check_build_query(
             "title:>foo",
             vec![],
-            TestExpectation::Err("Range queries are not currently allowed."),
+            TestExpectation::Err("Range queries are not currently allowed.")
         )?;
         check_build_query(
             "title:foo desc:bar _source:baz",
             vec![],
-            TestExpectation::Ok("TermQuery"),
+            TestExpectation::Ok("TermQuery")
         )?;
 
         check_build_query(
             "server.type:hpc server.mem:4GB",
             vec![],
-            TestExpectation::Err("Field does not exists: '\"server.type\"'"),
+            TestExpectation::Err("Field does not exists: '\"server.type\"'")
         )?;
 
         check_build_query(
             "title:foo desc:bar",
             vec!["url".to_string()],
-            TestExpectation::Err("Field does not exists: '\"url\"'"),
+            TestExpectation::Err("Field does not exists: '\"url\"'")
         )?;
 
         check_build_query(
             "server.name:\".bar:\" server.mem:4GB",
             vec!["server.name".to_string()],
-            TestExpectation::Ok("TermQuery"),
+            TestExpectation::Ok("TermQuery")
         )?;
 
         check_build_query(
             "server.name:\"for.bar:b\" server.mem:4GB",
             vec![],
-            TestExpectation::Ok("TermQuery"),
+            TestExpectation::Ok("TermQuery")
         )?;
 
         Ok(())

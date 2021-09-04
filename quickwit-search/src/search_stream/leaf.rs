@@ -1,44 +1,41 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use super::FastFieldCollectorBuilder;
-use crate::leaf::open_index;
-use crate::leaf::warmup;
-use crate::SearchError;
+use std::sync::Arc;
+
 use futures::{FutureExt, StreamExt};
 use quickwit_index_config::IndexConfig;
-use quickwit_proto::LeafSearchStreamResult;
-use quickwit_proto::OutputFormat;
-use quickwit_proto::SearchRequest;
-use quickwit_proto::SearchStreamRequest;
-use quickwit_proto::SplitIdAndFooterOffsets;
+use quickwit_proto::{
+    LeafSearchStreamResult, OutputFormat, SearchRequest, SearchStreamRequest,
+    SplitIdAndFooterOffsets
+};
 use quickwit_storage::Storage;
-use std::sync::Arc;
 use tantivy::query::Query;
 use tantivy::schema::Type;
-use tantivy::LeasedItem;
-use tantivy::ReloadPolicy;
-use tantivy::Searcher;
+use tantivy::{LeasedItem, ReloadPolicy, Searcher};
 use tokio::task::spawn_blocking;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::error;
+
+use super::FastFieldCollectorBuilder;
+use crate::leaf::{open_index, warmup};
+use crate::SearchError;
 
 // TODO: buffer of 5 seems to be sufficient to do the job locally, needs to be tested on a cluster.
 const CONCURRENT_SPLIT_SEARCH_STREAM: usize = 5;
@@ -54,7 +51,7 @@ pub async fn leaf_search_stream(
     request: SearchStreamRequest,
     storage: Arc<dyn Storage>,
     splits: Vec<SplitIdAndFooterOffsets>,
-    index_config: Arc<dyn IndexConfig>,
+    index_config: Arc<dyn IndexConfig>
 ) -> UnboundedReceiverStream<crate::Result<LeafSearchStreamResult>> {
     let (result_sender, result_receiver) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(async move {
@@ -76,7 +73,7 @@ async fn leaf_search_results_stream(
     request: SearchStreamRequest,
     storage: Arc<dyn Storage>,
     splits: Vec<SplitIdAndFooterOffsets>,
-    index_config: Arc<dyn IndexConfig>,
+    index_config: Arc<dyn IndexConfig>
 ) -> impl futures::Stream<Item = crate::Result<LeafSearchStreamResult>> + Sync + Send + 'static {
     futures::stream::iter(splits)
         .map(move |split| {
@@ -84,7 +81,7 @@ async fn leaf_search_results_stream(
                 split,
                 index_config.clone(),
                 request.clone(),
-                storage.clone(),
+                storage.clone()
             )
             .shared()
         })
@@ -96,7 +93,7 @@ async fn leaf_search_stream_single_split(
     split: SplitIdAndFooterOffsets,
     index_config: Arc<dyn IndexConfig>,
     stream_request: SearchStreamRequest,
-    storage: Arc<dyn Storage>,
+    storage: Arc<dyn Storage>
 ) -> crate::Result<LeafSearchStreamResult> {
     let index = open_index(storage, &split).await?;
     let split_schema = index.schema();
@@ -116,7 +113,7 @@ async fn leaf_search_stream_single_split(
         index_config.timestamp_field_name(),
         index_config.timestamp_field(&split_schema),
         stream_request.start_timestamp,
-        stream_request.end_timestamp,
+        stream_request.end_timestamp
     )?;
 
     let output_format = OutputFormat::from_i32(stream_request.output_format).ok_or_else(|| {
@@ -137,7 +134,7 @@ async fn leaf_search_stream_single_split(
     warmup(
         &*searcher,
         query.as_ref(),
-        &fast_field_collector_builder.fast_field_to_warm(),
+        &fast_field_collector_builder.fast_field_to_warm()
     )
     .await?;
     let collect_handle = spawn_blocking(move || {
@@ -145,7 +142,7 @@ async fn leaf_search_stream_single_split(
             &fast_field_collector_builder,
             &searcher,
             query,
-            output_format,
+            output_format
         )
     });
     let buffer = collect_handle.await.map_err(|error| {
@@ -159,7 +156,7 @@ fn collect_fast_field_values(
     fast_field_collector_builder: &FastFieldCollectorBuilder,
     searcher: &LeasedItem<Searcher>,
     query: Box<dyn Query>,
-    output_format: OutputFormat,
+    output_format: OutputFormat
 ) -> crate::Result<Vec<u8>> {
     let mut buffer = Vec::new();
     match fast_field_collector_builder.value_type() {
@@ -169,9 +166,9 @@ fn collect_fast_field_values(
             super::serialize::<i64>(&fast_field_values, &mut buffer, output_format).map_err(
                 |_| {
                     SearchError::InternalError(
-                        "Error when serializing i64 during export".to_owned(),
+                        "Error when serializing i64 during export".to_owned()
                     )
-                },
+                }
             )?;
         }
         Type::U64 => {
@@ -180,9 +177,9 @@ fn collect_fast_field_values(
             super::serialize::<u64>(&fast_field_values, &mut buffer, output_format).map_err(
                 |_| {
                     SearchError::InternalError(
-                        "Error when serializing u64 during export".to_owned(),
+                        "Error when serializing u64 during export".to_owned()
                     )
-                },
+                }
             )?;
         }
         value_type => {
@@ -197,13 +194,14 @@ fn collect_fast_field_values(
 
 #[cfg(test)]
 mod tests {
-    use std::{str::from_utf8, sync::Arc};
+    use std::str::from_utf8;
+    use std::sync::Arc;
 
     use quickwit_core::TestSandbox;
     use quickwit_index_config::DefaultIndexConfigBuilder;
+    use serde_json::json;
 
     use super::*;
-    use serde_json::json;
 
     #[tokio::test]
     async fn test_leaf_search_stream_to_csv_output_with_filtering() -> anyhow::Result<()> {
@@ -248,7 +246,7 @@ mod tests {
             end_timestamp: Some(end_timestamp),
             fast_field: "ts".to_string(),
             output_format: 0,
-            tags: vec![],
+            tags: vec![]
         };
         let index_metadata = test_sandbox.metastore().index_metadata(index_id).await?;
         let splits = test_sandbox.metastore().list_all_splits(index_id).await?;
@@ -257,7 +255,7 @@ mod tests {
             .map(|split_meta| SplitIdAndFooterOffsets {
                 split_id: split_meta.split_metadata.split_id,
                 split_footer_start: split_meta.footer_offsets.start,
-                split_footer_end: split_meta.footer_offsets.end,
+                split_footer_end: split_meta.footer_offsets.end
             })
             .collect();
         let mut single_node_stream = leaf_search_stream(
@@ -266,7 +264,7 @@ mod tests {
                 .storage_uri_resolver()
                 .resolve(&index_metadata.index_uri)?,
             splits_offsets,
-            index_config,
+            index_config
         )
         .await;
         let res = single_node_stream.next().await.expect("no leaf result")?;

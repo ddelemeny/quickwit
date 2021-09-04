@@ -1,53 +1,49 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::HashSet;
 use std::marker::PhantomData;
 
+use tantivy::collector::{Collector, SegmentCollector};
+use tantivy::fastfield::{DynamicFastFieldReader, FastFieldReader, FastValue};
+use tantivy::schema::{Field, Type};
+use tantivy::{DocId, Score, SegmentOrdinal, SegmentReader, TantivyError};
+
 use crate::filters::TimestampFilter;
 use crate::SearchError;
-use tantivy::fastfield::FastFieldReader;
-use tantivy::schema::Type;
-use tantivy::{
-    collector::{Collector, SegmentCollector},
-    fastfield::{DynamicFastFieldReader, FastValue},
-    schema::Field,
-    DocId, Score, SegmentOrdinal, SegmentReader, TantivyError,
-};
 
 #[derive(Clone)]
 pub struct FastFieldSegmentCollector<Item: FastValue> {
     fast_field_values: Vec<Item>,
     fast_field_reader: DynamicFastFieldReader<Item>,
-    timestamp_filter_opt: Option<TimestampFilter>,
+    timestamp_filter_opt: Option<TimestampFilter>
 }
 
 impl<Item: FastValue> FastFieldSegmentCollector<Item> {
     pub fn new(
         fast_field_reader: DynamicFastFieldReader<Item>,
-        timestamp_filter_opt: Option<TimestampFilter>,
+        timestamp_filter_opt: Option<TimestampFilter>
     ) -> Self {
         Self {
             fast_field_values: vec![],
             fast_field_reader,
-            timestamp_filter_opt,
+            timestamp_filter_opt
         }
     }
 
@@ -81,7 +77,7 @@ pub struct FastFieldCollector<Item: FastValue> {
     pub timestamp_field_opt: Option<Field>,
     pub start_timestamp_opt: Option<i64>,
     pub end_timestamp_opt: Option<i64>,
-    _marker: PhantomData<Item>,
+    _marker: PhantomData<Item>
 }
 
 impl<Item: FastValue> Collector for FastFieldCollector<Item> {
@@ -91,14 +87,14 @@ impl<Item: FastValue> Collector for FastFieldCollector<Item> {
     fn for_segment(
         &self,
         _segment_ord: SegmentOrdinal,
-        segment_reader: &SegmentReader,
+        segment_reader: &SegmentReader
     ) -> tantivy::Result<Self::Child> {
         let timestamp_filter_opt = if let Some(timestamp_field) = self.timestamp_field_opt {
             TimestampFilter::new(
                 timestamp_field,
                 self.start_timestamp_opt,
                 self.end_timestamp_opt,
-                segment_reader,
+                segment_reader
             )?
         } else {
             None
@@ -112,7 +108,7 @@ impl<Item: FastValue> Collector for FastFieldCollector<Item> {
         let fast_field_reader = DynamicFastFieldReader::open(fast_field_slice)?;
         Ok(FastFieldSegmentCollector::new(
             fast_field_reader,
-            timestamp_filter_opt,
+            timestamp_filter_opt
         ))
     }
 
@@ -133,7 +129,7 @@ pub struct FastFieldCollectorBuilder {
     timestamp_field_name: Option<String>,
     timestamp_field: Option<Field>,
     start_timestamp: Option<i64>,
-    end_timestamp: Option<i64>,
+    end_timestamp: Option<i64>
 }
 
 impl FastFieldCollectorBuilder {
@@ -143,7 +139,7 @@ impl FastFieldCollectorBuilder {
         timestamp_field_name: Option<String>,
         timestamp_field: Option<Field>,
         start_timestamp: Option<i64>,
-        end_timestamp: Option<i64>,
+        end_timestamp: Option<i64>
     ) -> crate::Result<Self> {
         match fast_field_value_type {
             Type::U64 | Type::I64 => (),
@@ -160,7 +156,7 @@ impl FastFieldCollectorBuilder {
             timestamp_field_name,
             timestamp_field,
             start_timestamp,
-            end_timestamp,
+            end_timestamp
         })
     }
 
@@ -183,7 +179,7 @@ impl FastFieldCollectorBuilder {
             timestamp_field_opt: self.timestamp_field,
             start_timestamp_opt: self.start_timestamp,
             end_timestamp_opt: self.end_timestamp,
-            _marker: PhantomData,
+            _marker: PhantomData
         }
     }
 
@@ -212,7 +208,7 @@ mod tests {
             Some("field_name".to_string()),
             None,
             None,
-            None,
+            None
         )?;
         assert_eq!(
             builder.fast_field_to_warm(),
@@ -224,7 +220,7 @@ mod tests {
             Some("timestamp_field_name".to_string()),
             None,
             None,
-            None,
+            None
         )?;
         assert_eq!(
             builder.fast_field_to_warm(),

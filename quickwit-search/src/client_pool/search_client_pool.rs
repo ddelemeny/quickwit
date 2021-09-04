@@ -1,23 +1,21 @@
-/*
- * Copyright (C) 2021 Quickwit Inc.
- *
- * Quickwit is offered under the AGPL v3.0 and as commercial software.
- * For commercial licensing, contact us at hello@quickwit.io.
- *
- * AGPL:
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
@@ -26,17 +24,15 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use quickwit_cluster::cluster::Cluster;
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 use tracing::*;
 
-use quickwit_cluster::cluster::Cluster;
-
 use crate::client::create_search_service_client;
 use crate::client_pool::{ClientPool, Job};
 use crate::rendezvous_hasher::{sort_by_rendez_vous_hash, Node};
-use crate::swim_addr_to_grpc_addr;
-use crate::SearchServiceClient;
+use crate::{swim_addr_to_grpc_addr, SearchServiceClient};
 
 /// Search client pool implementation.
 #[derive(Clone)]
@@ -44,13 +40,13 @@ pub struct SearchClientPool {
     /// Search clients.
     /// A hash map with gRPC's SocketAddr as the key and SearchServiceClient as the value.
     /// It is not the cluster listen address.
-    pub clients: Arc<RwLock<HashMap<SocketAddr, SearchServiceClient>>>,
+    pub clients: Arc<RwLock<HashMap<SocketAddr, SearchServiceClient>>>
 }
 
 impl SearchClientPool {
     #[cfg(test)]
     pub async fn from_mocks(
-        mock_services: Vec<Arc<dyn crate::SearchService>>,
+        mock_services: Vec<Arc<dyn crate::SearchService>>
     ) -> anyhow::Result<Self> {
         let mut mock_clients = HashMap::new();
         for (mock_ord, mock_service) in mock_services.into_iter().enumerate() {
@@ -61,7 +57,7 @@ impl SearchClientPool {
         }
 
         Ok(SearchClientPool {
-            clients: Arc::new(RwLock::new(mock_clients)),
+            clients: Arc::new(RwLock::new(mock_clients))
         })
     }
 
@@ -87,7 +83,7 @@ impl SearchClientPool {
 
         // Create search client pool.
         let client_pool = SearchClientPool {
-            clients: Arc::new(RwLock::new(clients)),
+            clients: Arc::new(RwLock::new(clients))
         };
 
         // Prepare to start a thread that will monitor cluster members.
@@ -149,7 +145,7 @@ impl ClientPool for SearchClientPool {
     async fn assign_jobs(
         &self,
         mut jobs: Vec<Job>,
-        mut exclude_addresses: &HashSet<SocketAddr>,
+        mut exclude_addresses: &HashSet<SocketAddr>
     ) -> anyhow::Result<Vec<(SearchServiceClient, Vec<Job>)>> {
         let mut splits_groups: HashMap<SocketAddr, Vec<Job>> = HashMap::new();
 
@@ -233,8 +229,7 @@ mod tests {
     use std::collections::HashSet;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::sync::Arc;
-    use std::thread;
-    use std::time;
+    use std::{thread, time};
 
     use quickwit_cluster::cluster::{read_host_key, Cluster};
     use quickwit_cluster::test_utils::{available_port, test_cluster};
@@ -242,8 +237,7 @@ mod tests {
 
     use crate::client_pool::search_client_pool::create_search_service_client;
     use crate::client_pool::{ClientPool, Job};
-    use crate::swim_addr_to_grpc_addr;
-    use crate::SearchClientPool;
+    use crate::{swim_addr_to_grpc_addr, SearchClientPool};
 
     #[tokio::test]
     async fn test_search_client_pool_single_node() -> anyhow::Result<()> {
@@ -333,19 +327,19 @@ mod tests {
         let jobs = vec![
             Job {
                 metadata: mock_bundle_and_split_metadata("split1"),
-                cost: 1,
+                cost: 1
             },
             Job {
                 metadata: mock_bundle_and_split_metadata("split2"),
-                cost: 2,
+                cost: 2
             },
             Job {
                 metadata: mock_bundle_and_split_metadata("split3"),
-                cost: 3,
+                cost: 3
             },
             Job {
                 metadata: mock_bundle_and_split_metadata("split4"),
-                cost: 4,
+                cost: 4
             },
         ];
 
@@ -357,21 +351,21 @@ mod tests {
             vec![
                 Job {
                     metadata: mock_bundle_and_split_metadata("split4"),
-                    cost: 4,
+                    cost: 4
                 },
                 Job {
                     metadata: mock_bundle_and_split_metadata("split3"),
-                    cost: 3,
+                    cost: 3
                 },
                 Job {
                     metadata: mock_bundle_and_split_metadata("split2"),
-                    cost: 2,
+                    cost: 2
                 },
                 Job {
                     metadata: mock_bundle_and_split_metadata("split1"),
-                    cost: 1,
+                    cost: 1
                 },
-            ],
+            ]
         )];
         println!("expected={:?}", expected);
 

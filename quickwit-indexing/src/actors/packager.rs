@@ -1,22 +1,21 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::HashSet;
 use std::fs::File;
@@ -25,23 +24,16 @@ use std::io::Write;
 use std::ops::Range;
 use std::path::PathBuf;
 
-use crate::models::IndexedSplit;
-use crate::models::PackagedSplit;
-use crate::models::ScratchDirectory;
 use anyhow::Context;
 use fail::fail_point;
-use quickwit_actors::Actor;
-use quickwit_actors::ActorContext;
-use quickwit_actors::Mailbox;
-use quickwit_actors::QueueCapacity;
-use quickwit_actors::SyncActor;
+use quickwit_actors::{Actor, ActorContext, Mailbox, QueueCapacity, SyncActor};
 use quickwit_directories::write_hotcache;
-use quickwit_storage::BundleStorageBuilder;
-use quickwit_storage::BUNDLE_FILENAME;
+use quickwit_storage::{BundleStorageBuilder, BUNDLE_FILENAME};
 use tantivy::common::CountingWriter;
-use tantivy::SegmentId;
-use tantivy::SegmentMeta;
+use tantivy::{SegmentId, SegmentMeta};
 use tracing::*;
+
+use crate::models::{IndexedSplit, PackagedSplit, ScratchDirectory};
 
 /// The role of the packager is to get an index writer and
 /// produce a split file.
@@ -55,7 +47,7 @@ use tracing::*;
 ///
 /// The split format is described in `internals/split-format.md`
 pub struct Packager {
-    uploader_mailbox: Mailbox<PackagedSplit>,
+    uploader_mailbox: Mailbox<PackagedSplit>
 }
 
 impl Packager {
@@ -88,7 +80,7 @@ fn is_merge_required(segment_metas: &[SegmentMeta]) -> bool {
         // if there is only segment but it has deletes, it
         // still makes sense to merge it alone in order to remove deleted documents.
         [segment_meta] => segment_meta.has_deletes(),
-        _ => true,
+        _ => true
     }
 }
 
@@ -111,7 +103,7 @@ fn commit_split(split: &mut IndexedSplit, ctx: &ActorContext<IndexedSplit>) -> a
 
 fn list_split_files(
     segment_metas: &[SegmentMeta],
-    scratch_directory: &ScratchDirectory,
+    scratch_directory: &ScratchDirectory
 ) -> Vec<PathBuf> {
     let mut index_files = vec![scratch_directory.path().join("meta.json")];
 
@@ -137,7 +129,7 @@ fn create_file_bundle(
     segment_metas: &[SegmentMeta],
     scratch_dir: &ScratchDirectory,
     split_file: &mut impl io::Write,
-    ctx: &ActorContext<IndexedSplit>,
+    ctx: &ActorContext<IndexedSplit>
 ) -> anyhow::Result<Range<u64>> {
     let _protected_zone_guard = ctx.protect_zone();
     // List the split files that will be packaged into the bundle.
@@ -157,7 +149,7 @@ fn create_file_bundle(
 /// which potentially olds a lot of RAM.
 fn merge_segments_if_required(
     split: &mut IndexedSplit,
-    ctx: &ActorContext<IndexedSplit>,
+    ctx: &ActorContext<IndexedSplit>
 ) -> anyhow::Result<Vec<SegmentMeta>> {
     debug!(split = ?split, "merge-segments-if-required");
     let segment_metas_before_merge = split.index.searchable_segment_metas()?;
@@ -177,7 +169,7 @@ fn merge_segments_if_required(
 
 fn build_hotcache<W: io::Write>(
     scratch_dir: &ScratchDirectory,
-    split_file: &mut W,
+    split_file: &mut W
 ) -> anyhow::Result<()> {
     let mmap_directory = tantivy::directory::MmapDirectory::open(scratch_dir.path())?;
     write_hotcache(mmap_directory, split_file)?;
@@ -187,7 +179,7 @@ fn build_hotcache<W: io::Write>(
 fn create_packaged_split(
     segment_metas: &[SegmentMeta],
     split: IndexedSplit,
-    ctx: &ActorContext<IndexedSplit>,
+    ctx: &ActorContext<IndexedSplit>
 ) -> anyhow::Result<PackagedSplit> {
     info!(split = ?split, "create-packaged-split");
 
@@ -197,12 +189,12 @@ fn create_packaged_split(
     debug!(split = ?split, "create-file-bundle");
     let Range {
         start: footer_start,
-        end: _,
+        end: _
     } = create_file_bundle(
         segment_metas,
         &split.split_scratch_directory,
         &mut split_file,
-        ctx,
+        ctx
     )?;
 
     let num_docs = segment_metas
@@ -250,7 +242,7 @@ fn create_packaged_split(
         time_range: split.time_range,
         size_in_bytes: split.docs_size_in_bytes,
         tags,
-        footer_offsets: footer_start..footer_end,
+        footer_offsets: footer_start..footer_end
     };
     Ok(packaged_split)
 }
@@ -259,7 +251,7 @@ impl SyncActor for Packager {
     fn process_message(
         &mut self,
         mut split: IndexedSplit,
-        ctx: &ActorContext<IndexedSplit>,
+        ctx: &ActorContext<IndexedSplit>
     ) -> Result<(), quickwit_actors::ActorExitStatus> {
         fail_point!("packager:before");
         commit_split(&mut split, ctx)?;
@@ -276,19 +268,13 @@ mod tests {
     use std::ops::RangeInclusive;
     use std::time::Instant;
 
-    use quickwit_actors::create_test_mailbox;
-    use quickwit_actors::ObservationType;
-    use quickwit_actors::Universe;
+    use quickwit_actors::{create_test_mailbox, ObservationType, Universe};
     use quickwit_metastore::checkpoint::CheckpointDelta;
-    use tantivy::doc;
-    use tantivy::schema::Schema;
-    use tantivy::schema::FAST;
-    use tantivy::schema::TEXT;
-    use tantivy::Index;
-
-    use crate::models::ScratchDirectory;
+    use tantivy::schema::{Schema, FAST, TEXT};
+    use tantivy::{doc, Index};
 
     use super::*;
+    use crate::models::ScratchDirectory;
 
     fn make_indexed_split_for_test(segments_timestamps: &[&[i64]]) -> anyhow::Result<IndexedSplit> {
         let split_scratch_directory = ScratchDirectory::try_new_temp()?;
@@ -318,7 +304,7 @@ mod tests {
                             let end = timestamp.max(*timestamp_range.end());
                             RangeInclusive::new(start, end)
                         })
-                        .unwrap_or_else(|| RangeInclusive::new(timestamp, timestamp)),
+                        .unwrap_or_else(|| RangeInclusive::new(timestamp, timestamp))
                 )
             }
         }
@@ -337,7 +323,7 @@ mod tests {
             index_writer,
             split_scratch_directory,
             checkpoint_delta: CheckpointDelta::from(10..20),
-            tags_field: tantivy::schema::Field::from_field_id(0),
+            tags_field: tantivy::schema::Field::from_field_id(0)
         };
         Ok(indexed_split)
     }

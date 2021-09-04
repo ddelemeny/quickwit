@@ -1,39 +1,35 @@
-/*
- * Copyright (C) 2021 Quickwit Inc.
- *
- * Quickwit is offered under the AGPL v3.0 and as commercial software.
- * For commercial licensing, contact us at hello@quickwit.io.
- *
- * AGPL:
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
+
 use std::mem;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::oneshot;
-use tokio::sync::Mutex;
-use tokio::sync::RwLock;
+use tokio::sync::{oneshot, Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::Interval;
 use tracing::info;
 
 use crate::payload::{ClientInformation, EventWithTimestamp, TelemetryEvent, TelemetryPayload};
-use crate::sink::HttpClient;
-use crate::sink::Sink;
+use crate::sink::{HttpClient, Sink};
 
 /// At most 1 Request per minutes.
 const TELEMETRY_PUSH_COOLDOWN: Duration = Duration::from_secs(60);
@@ -57,7 +53,7 @@ impl ClockButton {
 enum Clock {
     Periodical(Mutex<Interval>),
     #[cfg(test)]
-    Manual(Mutex<Receiver<()>>),
+    Manual(Mutex<Receiver<()>>)
 }
 
 impl Clock {
@@ -90,7 +86,7 @@ impl Clock {
 #[derive(Default)]
 struct EventsState {
     events: Vec<EventWithTimestamp>,
-    num_dropped_events: usize,
+    num_dropped_events: usize
 }
 
 impl EventsState {
@@ -99,8 +95,8 @@ impl EventsState {
             self,
             EventsState {
                 events: Vec::new(),
-                num_dropped_events: 0,
-            },
+                num_dropped_events: 0
+            }
         )
     }
 
@@ -121,7 +117,7 @@ impl EventsState {
 struct Events {
     state: RwLock<EventsState>,
     items_available_tx: Sender<()>,
-    items_available_rx: RwLock<Receiver<()>>,
+    items_available_rx: RwLock<Receiver<()>>
 }
 
 impl Default for Events {
@@ -130,7 +126,7 @@ impl Default for Events {
         Events {
             state: RwLock::new(EventsState::default()),
             items_available_tx,
-            items_available_rx: RwLock::new(items_available_rx),
+            items_available_rx: RwLock::new(items_available_rx)
         }
     }
 }
@@ -157,7 +153,7 @@ pub(crate) struct Inner {
     /// This channel is just used to signal there are new items available.
     events: Events,
     clock: Clock,
-    is_started: AtomicBool,
+    is_started: AtomicBool
 }
 
 impl Inner {
@@ -170,7 +166,7 @@ impl Inner {
         TelemetryPayload {
             client_information: self.client_information.clone(),
             events: events_state.events,
-            num_dropped_events: events_state.num_dropped_events,
+            num_dropped_events: events_state.num_dropped_events
         }
     }
 
@@ -194,15 +190,15 @@ impl Inner {
 }
 
 pub struct TelemetrySender {
-    pub(crate) inner: Arc<Inner>,
+    pub(crate) inner: Arc<Inner>
 }
 
 pub enum TelemetryLoopHandle {
     NoLoop,
     WithLoop {
         join_handle: JoinHandle<()>,
-        terminate_command_tx: oneshot::Sender<()>,
-    },
+        terminate_command_tx: oneshot::Sender<()>
+    }
 }
 
 impl TelemetryLoopHandle {
@@ -212,7 +208,7 @@ impl TelemetryLoopHandle {
     pub async fn terminate_telemetry(self) {
         if let Self::WithLoop {
             join_handle,
-            terminate_command_tx,
+            terminate_command_tx
         } = self
         {
             let _ = terminate_command_tx.send(());
@@ -234,8 +230,8 @@ impl TelemetrySender {
                 client_information: ClientInformation::default(),
                 events: Events::default(),
                 clock,
-                is_started: AtomicBool::new(false),
-            }),
+                is_started: AtomicBool::new(false)
+            })
         }
     }
 
@@ -269,7 +265,7 @@ impl TelemetrySender {
         });
         TelemetryLoopHandle::WithLoop {
             join_handle,
-            terminate_command_tx,
+            terminate_command_tx
         }
     }
 

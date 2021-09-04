@@ -1,35 +1,30 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Context;
 use itertools::Itertools;
-use quickwit_proto::FetchDocsResult;
-use quickwit_proto::Hit;
-use quickwit_proto::PartialHit;
-use quickwit_proto::SplitIdAndFooterOffsets;
+use quickwit_proto::{FetchDocsResult, Hit, PartialHit, SplitIdAndFooterOffsets};
 use quickwit_storage::Storage;
-use tantivy::IndexReader;
-use tantivy::ReloadPolicy;
+use tantivy::{IndexReader, ReloadPolicy};
 
 use crate::leaf::open_index;
 use crate::GlobalDocAddress;
@@ -40,7 +35,7 @@ use crate::GlobalDocAddress;
 async fn fetch_docs_to_map<'a>(
     mut global_doc_addrs: Vec<GlobalDocAddress<'a>>,
     index_storage: Arc<dyn Storage>,
-    splits: &[SplitIdAndFooterOffsets],
+    splits: &[SplitIdAndFooterOffsets]
 ) -> anyhow::Result<HashMap<GlobalDocAddress<'a>, String>> {
     let mut split_fetch_docs_futures = Vec::new();
 
@@ -64,7 +59,7 @@ async fn fetch_docs_to_map<'a>(
         split_fetch_docs_futures.push(fetch_docs_in_split(
             global_doc_addrs,
             index_storage.clone(),
-            *split_and_offset,
+            *split_and_offset
         ));
     }
 
@@ -89,7 +84,7 @@ async fn fetch_docs_to_map<'a>(
 pub async fn fetch_docs(
     partial_hits: Vec<PartialHit>,
     index_storage: Arc<dyn Storage>,
-    splits: &[SplitIdAndFooterOffsets],
+    splits: &[SplitIdAndFooterOffsets]
 ) -> anyhow::Result<FetchDocsResult> {
     let global_doc_addrs: Vec<GlobalDocAddress> = partial_hits
         .iter()
@@ -106,7 +101,7 @@ pub async fn fetch_docs(
             if let Some((_, json)) = global_doc_addr_to_doc_json.remove_entry(&global_doc_addr) {
                 Some(Hit {
                     json,
-                    partial_hit: Some(partial_hit.clone()),
+                    partial_hit: Some(partial_hit.clone())
                 })
             } else {
                 None
@@ -119,7 +114,7 @@ pub async fn fetch_docs(
 async fn get_searcher_for_split(
     num_searchers: usize,
     index_storage: Arc<dyn Storage>,
-    split: &SplitIdAndFooterOffsets,
+    split: &SplitIdAndFooterOffsets
 ) -> anyhow::Result<IndexReader> {
     let index = open_index(index_storage, split)
         .await
@@ -137,7 +132,7 @@ async fn get_searcher_for_split(
 async fn fetch_docs_in_split<'a>(
     global_doc_addrs: Vec<GlobalDocAddress<'a>>,
     index_storage: Arc<dyn Storage>,
-    split: &SplitIdAndFooterOffsets,
+    split: &SplitIdAndFooterOffsets
 ) -> anyhow::Result<Vec<(GlobalDocAddress<'a>, String)>> {
     let index_reader = get_searcher_for_split(global_doc_addrs.len(), index_storage, split).await?;
     let mut doc_futures = Vec::new();

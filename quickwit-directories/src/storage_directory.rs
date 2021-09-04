@@ -1,46 +1,41 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+use std::fmt::Debug;
+use std::ops::Range;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::{fmt, io};
 
 use async_trait::async_trait;
 use bytes::Bytes;
 use quickwit_storage::Storage;
-use std::fmt;
-use std::fmt::Debug;
-use std::io;
-use std::ops::Range;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use tantivy::directory::error::{DeleteError, OpenReadError, OpenWriteError};
-use tantivy::directory::OwnedBytes;
-use tantivy::directory::{FileHandle, WatchCallback, WatchHandle, WritePtr};
-use tantivy::HasLen;
-use tantivy::{AsyncIoResult, Directory};
+use tantivy::directory::{FileHandle, OwnedBytes, WatchCallback, WatchHandle, WritePtr};
+use tantivy::{AsyncIoResult, Directory, HasLen};
 use tracing::error;
 
 use crate::caching_directory::BytesWrapper;
 
 struct StorageDirectoryFileHandle {
     storage_directory: StorageDirectory,
-    path: PathBuf,
+    path: PathBuf
 }
 
 impl HasLen for StorageDirectoryFileHandle {
@@ -89,7 +84,7 @@ impl FileHandle for StorageDirectoryFileHandle {
 /// everytime `read_bytes` is called.
 #[derive(Clone)]
 pub struct StorageDirectory {
-    storage: Arc<dyn Storage>,
+    storage: Arc<dyn Storage>
 }
 
 impl Debug for StorageDirectory {
@@ -132,35 +127,35 @@ impl Directory for StorageDirectory {
     fn get_file_handle(&self, path: &Path) -> Result<Box<dyn FileHandle>, OpenReadError> {
         Ok(Box::new(StorageDirectoryFileHandle {
             storage_directory: self.clone(),
-            path: path.to_path_buf(),
+            path: path.to_path_buf()
         }))
     }
 
     fn atomic_read(&self, path: &Path) -> Result<Vec<u8>, OpenReadError> {
         Err(OpenReadError::wrap_io_error(
             unsupported_operation(path),
-            path.to_path_buf(),
+            path.to_path_buf()
         ))
     }
 
     fn delete(&self, path: &std::path::Path) -> Result<(), DeleteError> {
         Err(DeleteError::IoError {
             io_error: unsupported_operation(path),
-            filepath: path.to_path_buf(),
+            filepath: path.to_path_buf()
         })
     }
 
     fn exists(&self, path: &std::path::Path) -> Result<bool, OpenReadError> {
         Err(OpenReadError::wrap_io_error(
             unsupported_operation(path),
-            path.to_path_buf(),
+            path.to_path_buf()
         ))
     }
 
     fn open_write(&self, path: &std::path::Path) -> Result<WritePtr, OpenWriteError> {
         Err(OpenWriteError::wrap_io_error(
             unsupported_operation(path),
-            path.to_path_buf(),
+            path.to_path_buf()
         ))
     }
 

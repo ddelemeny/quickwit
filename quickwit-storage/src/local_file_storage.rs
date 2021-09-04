@@ -1,42 +1,41 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
-use crate::{PutPayload, Storage, StorageErrorKind, StorageFactory, StorageResult};
-use async_trait::async_trait;
-use bytes::Bytes;
-use futures::future::{BoxFuture, FutureExt};
 use std::io::{ErrorKind, SeekFrom};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fmt, io};
+
+use async_trait::async_trait;
+use bytes::Bytes;
+use futures::future::{BoxFuture, FutureExt};
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tracing::warn;
 
+use crate::{PutPayload, Storage, StorageErrorKind, StorageFactory, StorageResult};
+
 /// File system compatible storage implementation.
 #[derive(Clone)]
 pub struct LocalFileStorage {
-    root: PathBuf,
+    root: PathBuf
 }
 
 impl fmt::Debug for LocalFileStorage {
@@ -108,7 +107,7 @@ fn delete_all_dirs(root: PathBuf, path: &Path) -> BoxFuture<'_, std::io::Result<
                 }
                 delete_all_dirs(root, path).await?;
             }
-            _ => return Ok(()),
+            _ => return Ok(())
         }
 
         Ok(())
@@ -120,7 +119,7 @@ fn missing_file_is_ok(io_result: io::Result<()>) -> io::Result<()> {
     match io_result {
         Ok(()) => Ok(()),
         Err(io_err) if io_err.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(io_err) => Err(io_err),
+        Err(io_err) => Err(io_err)
     }
 }
 
@@ -237,7 +236,8 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::{tests::storage_test_suite, StorageError};
+    use crate::tests::storage_test_suite;
+    use crate::StorageError;
 
     #[tokio::test]
     async fn test_storage() -> anyhow::Result<()> {

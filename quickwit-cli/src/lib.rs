@@ -1,68 +1,50 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
-use anyhow::bail;
-use anyhow::Context;
-use byte_unit::Byte;
-use crossterm::style::Print;
-use crossterm::style::PrintStyledContent;
-use crossterm::style::Stylize;
-use crossterm::QueueableCommand;
-use json_comments::StripComments;
-use quickwit_actors::ActorExitStatus;
-use quickwit_actors::ActorHandle;
-use quickwit_actors::ObservationType;
-use quickwit_actors::Universe;
-use quickwit_common::extract_index_id_from_index_uri;
-use quickwit_core::reset_index;
-use quickwit_index_config::DefaultIndexConfigBuilder;
-use quickwit_index_config::IndexConfig;
-use quickwit_indexing::actors::IndexerParams;
-use quickwit_indexing::actors::{IndexingPipelineParams, IndexingPipelineSupervisor};
-use quickwit_indexing::models::CommitPolicy;
-use quickwit_indexing::models::IndexingStatistics;
-use quickwit_indexing::models::ScratchDirectory;
-use quickwit_indexing::source::FileSourceParams;
-use quickwit_indexing::source::SourceConfig;
-use quickwit_metastore::checkpoint::Checkpoint;
-use quickwit_metastore::IndexMetadata;
-use quickwit_metastore::MetastoreUriResolver;
-use quickwit_proto::SearchRequest;
-use quickwit_proto::SearchResult;
-use quickwit_search::single_node_search;
-use quickwit_search::SearchResultJson;
-use quickwit_storage::quickwit_storage_uri_resolver;
-use quickwit_telemetry::payload::TelemetryEvent;
 use std::collections::VecDeque;
-use std::env;
-use std::io::Stdout;
-use std::io::{stdout, Write};
+use std::io::{stdout, Stdout, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::usize;
-use tracing::debug;
+use std::{env, usize};
 
-use quickwit_core::{create_index, delete_index, garbage_collect_index};
+use anyhow::{bail, Context};
+use byte_unit::Byte;
+use crossterm::style::{Print, PrintStyledContent, Stylize};
+use crossterm::QueueableCommand;
+use json_comments::StripComments;
+use quickwit_actors::{ActorExitStatus, ActorHandle, ObservationType, Universe};
+use quickwit_common::extract_index_id_from_index_uri;
+use quickwit_core::{create_index, delete_index, garbage_collect_index, reset_index};
+use quickwit_index_config::{DefaultIndexConfigBuilder, IndexConfig};
+use quickwit_indexing::actors::{
+    IndexerParams, IndexingPipelineParams, IndexingPipelineSupervisor
+};
+use quickwit_indexing::models::{CommitPolicy, IndexingStatistics, ScratchDirectory};
+use quickwit_indexing::source::{FileSourceParams, SourceConfig};
+use quickwit_metastore::checkpoint::Checkpoint;
+use quickwit_metastore::{IndexMetadata, MetastoreUriResolver};
+use quickwit_proto::{SearchRequest, SearchResult};
+use quickwit_search::{single_node_search, SearchResultJson};
+use quickwit_storage::quickwit_storage_uri_resolver;
+use quickwit_telemetry::payload::TelemetryEvent;
+use tracing::debug;
 
 /// Throughput calculation window size.
 const THROUGHPUT_WINDOW_SIZE: usize = 5;
@@ -72,7 +54,7 @@ pub struct CreateIndexArgs {
     metastore_uri: String,
     index_uri: String,
     index_config: Arc<dyn IndexConfig>,
-    overwrite: bool,
+    overwrite: bool
 }
 impl PartialEq for CreateIndexArgs {
     // index_config is opaque and not compared currently, need to change the trait to enable
@@ -87,7 +69,7 @@ impl CreateIndexArgs {
         metastore_uri: String,
         index_uri: String,
         index_config_path: PathBuf,
-        overwrite: bool,
+        overwrite: bool
     ) -> anyhow::Result<Self> {
         let json_file = std::fs::File::open(index_config_path.clone())
             .with_context(|| format!("Cannot open index-config-path {:?}", index_config_path))?;
@@ -109,7 +91,7 @@ impl CreateIndexArgs {
             metastore_uri,
             index_uri,
             index_config,
-            overwrite,
+            overwrite
         })
     }
 }
@@ -121,7 +103,7 @@ pub struct IndexDataArgs {
     pub input_path: Option<PathBuf>,
     pub temp_dir: Option<PathBuf>,
     pub heap_size: Byte,
-    pub overwrite: bool,
+    pub overwrite: bool
 }
 
 #[derive(Debug, PartialEq, Eq, Default)]
@@ -134,14 +116,14 @@ pub struct SearchIndexArgs {
     pub search_fields: Option<Vec<String>>,
     pub start_timestamp: Option<i64>,
     pub end_timestamp: Option<i64>,
-    pub tags: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct DeleteIndexArgs {
     pub metastore_uri: String,
     pub index_id: String,
-    pub dry_run: bool,
+    pub dry_run: bool
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -149,7 +131,7 @@ pub struct GarbageCollectIndexArgs {
     pub metastore_uri: String,
     pub index_id: String,
     pub grace_period: Duration,
-    pub dry_run: bool,
+    pub dry_run: bool
 }
 
 pub async fn create_index_cli(args: CreateIndexArgs) -> anyhow::Result<()> {
@@ -165,7 +147,7 @@ pub async fn create_index_cli(args: CreateIndexArgs) -> anyhow::Result<()> {
         index_id: index_id.to_string(),
         index_uri: args.index_uri.to_string(),
         index_config: args.index_config,
-        checkpoint: Checkpoint::default(),
+        checkpoint: Checkpoint::default()
     };
     create_index(&args.metastore_uri, index_metadata).await?;
     Ok(())
@@ -194,7 +176,7 @@ pub async fn index_data_cli(args: IndexDataArgs) -> anyhow::Result<()> {
     let indexer_params = IndexerParams {
         scratch_directory,
         heap_size: args.heap_size,
-        commit_policy: CommitPolicy::default(), //< TODO make the commit policy configurable
+        commit_policy: CommitPolicy::default() //< TODO make the commit policy configurable
     };
 
     let indexing_pipeline_params = IndexingPipelineParams {
@@ -202,7 +184,7 @@ pub async fn index_data_cli(args: IndexDataArgs) -> anyhow::Result<()> {
         source_config,
         indexer_params,
         metastore,
-        storage_uri_resolver: storage_uri_resolver.clone(),
+        storage_uri_resolver: storage_uri_resolver.clone()
     };
 
     let indexing_supervisor = IndexingPipelineSupervisor::new(indexing_pipeline_params);
@@ -214,28 +196,36 @@ pub async fn index_data_cli(args: IndexDataArgs) -> anyhow::Result<()> {
     if args.input_path.is_none() && is_stdin_atty {
         let eof_shortcut = match env::consts::OS {
             "windows" => "CTRL+Z",
-            _ => "CTRL+D",
+            _ => "CTRL+D"
         };
-        println!("Please enter your new line delimited json documents one line at a time.\nEnd your input using {}.", eof_shortcut);
+        println!(
+            "Please enter your new line delimited json documents one line at a time.\nEnd your \
+             input using {}.",
+            eof_shortcut
+        );
     }
 
     let statistics =
         start_statistics_reporting_loop(supervisor_handler, args.input_path.clone()).await?;
 
     if statistics.num_published_splits > 0 {
-        println!("You can now query your index with `quickwit search --index-id {} --metastore-uri {} --query \"barack obama\"`" , args.index_id, args.metastore_uri);
+        println!(
+            "You can now query your index with `quickwit search --index-id {} --metastore-uri {} \
+             --query \"barack obama\"`",
+            args.index_id, args.metastore_uri
+        );
     }
     Ok(())
 }
 
 fn create_source_config_from_args(input_path_opt: Option<PathBuf>) -> SourceConfig {
     let params = FileSourceParams {
-        filepath: input_path_opt,
+        filepath: input_path_opt
     };
     SourceConfig {
         id: "cli_source".to_string(),
         source_type: "file".to_string(),
-        params: serde_json::to_value(params).unwrap(),
+        params: serde_json::to_value(params).unwrap()
     }
 }
 
@@ -252,7 +242,7 @@ pub async fn search_index(args: SearchIndexArgs) -> anyhow::Result<SearchResult>
         end_timestamp: args.end_timestamp,
         max_hits: args.max_hits as u64,
         start_offset: args.start_offset as u64,
-        tags: args.tags.unwrap_or_default(),
+        tags: args.tags.unwrap_or_default()
     };
     let search_result: SearchResult =
         single_node_search(&search_request, &*metastore, storage_uri_resolver.clone()).await?;
@@ -302,7 +292,7 @@ pub async fn garbage_collect_index_cli(args: GarbageCollectIndexArgs) -> anyhow:
         &args.metastore_uri,
         &args.index_id,
         args.grace_period,
-        args.dry_run,
+        args.dry_run
     )
     .await?;
     if deleted_files.is_empty() {
@@ -334,7 +324,7 @@ pub async fn garbage_collect_index_cli(args: GarbageCollectIndexArgs) -> anyhow:
 /// every once in awhile.
 pub async fn start_statistics_reporting_loop(
     pipeline_handler: ActorHandle<IndexingPipelineSupervisor>,
-    input_path_opt: Option<PathBuf>,
+    input_path_opt: Option<PathBuf>
 ) -> anyhow::Result<IndexingStatistics> {
     let mut stdout_handle = stdout();
     let start_time = Instant::now();
@@ -343,8 +333,9 @@ pub async fn start_statistics_reporting_loop(
     let mut report_interval = tokio::time::interval(Duration::from_secs(1));
 
     loop {
-        // TODO fixme. The way we wait today is a bit lame: if the indexing pipeline exits, we will stil
-        // wait up to an entire heartbeat...  Ideally we should  select between two futures.
+        // TODO fixme. The way we wait today is a bit lame: if the indexing pipeline exits, we will
+        // stil wait up to an entire heartbeat...  Ideally we should  select between two
+        // futures.
         report_interval.tick().await;
         // Try to receive with a timeout of 1 second.
         // 1 second is also the frequency at which we update statistic in the console
@@ -356,7 +347,7 @@ pub async fn start_statistics_reporting_loop(
                 &mut stdout_handle,
                 &mut throughput_calculator,
                 &observation.state,
-                is_tty,
+                is_tty
             )?;
         }
 
@@ -391,10 +382,10 @@ pub async fn start_statistics_reporting_loop(
             &mut stdout_handle,
             &mut throughput_calculator,
             &statistics,
-            is_tty,
+            is_tty
         )?;
     }
-    //display end of task report
+    // display end of task report
     println!();
     let elapsed_secs = start_time.elapsed().as_secs();
     if elapsed_secs >= 60 {
@@ -419,7 +410,7 @@ fn display_statistics(
     stdout_handle: &mut Stdout,
     throughput_calculator: &mut ThroughputCalculator,
     statistics: &IndexingStatistics,
-    is_tty: bool,
+    is_tty: bool
 ) -> anyhow::Result<()> {
     let elapsed_duration = chrono::Duration::from_std(throughput_calculator.elapsed_time())?;
     let elapsed_time = format!(
@@ -447,7 +438,8 @@ fn display_statistics(
         stdout_handle.queue(Print(format!("{}\n", elapsed_time)))?;
     } else {
         let report_line = format!(
-            "Num docs: {:>7} Parse errs: {:>5} Staged splits: {:>3} Input size: {:>5}MB Thrghput: {:>5.2}MB/s Time: {}\n",
+            "Num docs: {:>7} Parse errs: {:>5} Staged splits: {:>3} Input size: {:>5}MB Thrghput: \
+             {:>5.2}MB/s Time: {}\n",
             statistics.num_docs,
             statistics.num_invalid_docs,
             statistics.num_staged_splits,
@@ -466,7 +458,7 @@ struct ThroughputCalculator {
     /// Stores the time series of processed bytes value.
     processed_bytes_values: VecDeque<(Instant, u64)>,
     /// Store the time this calculator started
-    start_time: Instant,
+    start_time: Instant
 }
 
 impl ThroughputCalculator {
@@ -477,7 +469,7 @@ impl ThroughputCalculator {
             .collect();
         Self {
             processed_bytes_values,
-            start_time,
+            start_time
         }
     }
 

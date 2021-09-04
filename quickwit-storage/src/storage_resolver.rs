@@ -1,31 +1,31 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-use crate::local_file_storage::LocalFileStorageFactory;
-use crate::ram_storage::RamStorageFactory;
-use crate::{RegionProvider, S3CompatibleObjectStorageFactory, Storage, StorageResolverError};
-use once_cell::sync::OnceCell;
 use std::collections::HashMap;
 use std::error::Error;
 use std::sync::Arc;
+
+use once_cell::sync::OnceCell;
+
+use crate::local_file_storage::LocalFileStorageFactory;
+use crate::ram_storage::RamStorageFactory;
+use crate::{RegionProvider, S3CompatibleObjectStorageFactory, Storage, StorageResolverError};
 
 /// Quickwit supported storage resolvers.
 pub fn quickwit_storage_uri_resolver() -> &'static StorageUriResolver {
@@ -37,7 +37,7 @@ pub fn quickwit_storage_uri_resolver() -> &'static StorageUriResolver {
             .register(S3CompatibleObjectStorageFactory::default())
             .register(S3CompatibleObjectStorageFactory::new(
                 RegionProvider::Localstack,
-                "s3+localstack",
+                "s3+localstack"
             ))
             .build()
     })
@@ -56,12 +56,12 @@ pub trait StorageFactory: Send + Sync + 'static {
 /// based on its protocol.
 #[derive(Clone)]
 pub struct StorageUriResolver {
-    per_protocol_resolver: Arc<HashMap<String, Arc<dyn StorageFactory>>>,
+    per_protocol_resolver: Arc<HashMap<String, Arc<dyn StorageFactory>>>
 }
 
 #[derive(Default)]
 pub struct StorageUriResolverBuilder {
-    per_protocol_resolver: HashMap<String, Arc<dyn StorageFactory>>,
+    per_protocol_resolver: HashMap<String, Arc<dyn StorageFactory>>
 }
 
 impl StorageUriResolverBuilder {
@@ -78,7 +78,7 @@ impl StorageUriResolverBuilder {
     /// Builds the `StorageUriResolver`.
     pub fn build(self) -> StorageUriResolver {
         StorageUriResolver {
-            per_protocol_resolver: Arc::new(self.per_protocol_resolver),
+            per_protocol_resolver: Arc::new(self.per_protocol_resolver)
         }
     }
 }
@@ -96,7 +96,7 @@ impl StorageUriResolver {
             .register(LocalFileStorageFactory::default())
             .register(S3CompatibleObjectStorageFactory::new(
                 RegionProvider::Localstack,
-                "s3+localstack",
+                "s3+localstack"
             ))
             .build()
     }
@@ -107,11 +107,11 @@ impl StorageUriResolver {
             .split("://")
             .next()
             .ok_or_else(|| StorageResolverError::InvalidUri {
-                message: format!("Protocol not found in storage uri: {}", uri),
+                message: format!("Protocol not found in storage uri: {}", uri)
             })?;
         let resolver = self.per_protocol_resolver.get(protocol).ok_or_else(|| {
             StorageResolverError::ProtocolUnsupported {
-                protocol: protocol.to_string(),
+                protocol: protocol.to_string()
             }
         })?;
         let storage = resolver.resolve(uri).map_err(|storage_error| {
@@ -120,7 +120,7 @@ impl StorageUriResolver {
                 message: storage_error
                     .source()
                     .map(|err| format!("{}", err))
-                    .unwrap_or_else(String::new),
+                    .unwrap_or_else(String::new)
             }
         })?;
         Ok(storage)
@@ -131,9 +131,8 @@ impl StorageUriResolver {
 mod tests {
     use std::path::Path;
 
-    use crate::RamStorage;
-
     use super::*;
+    use crate::RamStorage;
 
     #[tokio::test]
     async fn test_storage_resolver_simple() -> anyhow::Result<()> {
@@ -145,7 +144,7 @@ mod tests {
             Ok(Arc::new(
                 RamStorage::builder()
                     .put("hello", b"hello_content_second")
-                    .build(),
+                    .build()
             ))
         });
         let storage_resolver = StorageUriResolver::builder()
@@ -171,7 +170,7 @@ mod tests {
             Ok(Arc::new(
                 RamStorage::builder()
                     .put("hello", b"hello_content_second")
-                    .build(),
+                    .build()
             ))
         });
         let storage_resolver = StorageUriResolver::builder()

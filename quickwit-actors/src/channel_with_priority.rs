@@ -1,26 +1,25 @@
-/*
- * Copyright (C) 2021 Quickwit Inc.
- *
- * Quickwit is offered under the AGPL v3.0 and as commercial software.
- * For commercial licensing, contact us at hello@quickwit.io.
- *
- * AGPL:
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-use flume::RecvTimeoutError;
-use flume::TryRecvError;
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
+
 use std::time::Duration;
+
+use flume::{RecvTimeoutError, TryRecvError};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -28,7 +27,7 @@ pub enum SendError {
     #[error("The channel is closed.")]
     Disconnected,
     #[error("The channel is full.")]
-    Full,
+    Full
 }
 
 #[derive(Debug, Error, Copy, Clone, PartialEq, Eq)]
@@ -36,14 +35,14 @@ pub enum RecvError {
     #[error("A timeout occured when attempting to receive a message.")]
     Timeout,
     #[error("All sender were dropped an no message are pending in the channel.")]
-    Disconnected,
+    Disconnected
 }
 
 impl From<flume::RecvTimeoutError> for RecvError {
     fn from(flume_err: flume::RecvTimeoutError) -> Self {
         match flume_err {
             flume::RecvTimeoutError::Timeout => Self::Timeout,
-            flume::RecvTimeoutError::Disconnected => Self::Disconnected,
+            flume::RecvTimeoutError::Disconnected => Self::Disconnected
         }
     }
 }
@@ -58,7 +57,7 @@ impl<T> From<flume::TrySendError<T>> for SendError {
     fn from(try_send_error: flume::TrySendError<T>) -> Self {
         match try_send_error {
             flume::TrySendError::Full(_) => SendError::Full,
-            flume::TrySendError::Disconnected(_) => SendError::Disconnected,
+            flume::TrySendError::Disconnected(_) => SendError::Disconnected
         }
     }
 }
@@ -66,20 +65,20 @@ impl<T> From<flume::TrySendError<T>> for SendError {
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Priority {
     High,
-    Low,
+    Low
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum QueueCapacity {
     Bounded(usize),
-    Unbounded,
+    Unbounded
 }
 
 impl QueueCapacity {
     pub(crate) fn create_channel<M>(&self) -> (flume::Sender<M>, flume::Receiver<M>) {
         match *self {
             QueueCapacity::Bounded(cap) => flume::bounded(cap),
-            QueueCapacity::Unbounded => flume::unbounded(),
+            QueueCapacity::Unbounded => flume::unbounded()
         }
     }
 }
@@ -91,25 +90,25 @@ pub fn channel<T>(queue_capacity: QueueCapacity) -> (Sender<T>, Receiver<T>) {
         low_priority_rx,
         high_priority_rx,
         _high_priority_tx: high_priority_tx.clone(),
-        pending: None,
+        pending: None
     };
     let sender = Sender {
         low_priority_tx,
-        high_priority_tx,
+        high_priority_tx
     };
     (sender, receiver)
 }
 
 pub struct Sender<T> {
     low_priority_tx: flume::Sender<T>,
-    high_priority_tx: flume::Sender<T>,
+    high_priority_tx: flume::Sender<T>
 }
 
 impl<T> Sender<T> {
     fn channel(&self, priority: Priority) -> &flume::Sender<T> {
         match priority {
             Priority::High => &self.high_priority_tx,
-            Priority::Low => &self.low_priority_tx,
+            Priority::Low => &self.low_priority_tx
         }
     }
     pub async fn send(&self, msg: T, priority: Priority) -> Result<(), SendError> {
@@ -132,7 +131,7 @@ pub struct Receiver<T> {
     low_priority_rx: flume::Receiver<T>,
     high_priority_rx: flume::Receiver<T>,
     _high_priority_tx: flume::Sender<T>,
-    pending: Option<T>,
+    pending: Option<T>
 }
 
 impl<T> Receiver<T> {
@@ -144,7 +143,7 @@ impl<T> Receiver<T> {
                     "This can never happen, as the high priority Sender is owned by the Receiver."
                 );
             }
-            Err(TryRecvError::Empty) => None,
+            Err(TryRecvError::Empty) => None
         }
     }
 
@@ -163,7 +162,7 @@ impl<T> Receiver<T> {
 
     pub fn recv_high_priority_timeout_blocking(
         &mut self,
-        duration: Duration,
+        duration: Duration
     ) -> Result<T, RecvError> {
         let msg = self.high_priority_rx.recv_timeout(duration)?;
         Ok(msg)
@@ -257,8 +256,7 @@ impl<T> Receiver<T> {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
 
     use super::*;
 

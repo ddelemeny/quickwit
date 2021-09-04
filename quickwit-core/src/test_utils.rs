@@ -1,23 +1,21 @@
-/*
- * Copyright (C) 2021 Quickwit Inc.
- *
- * Quickwit is offered under the AGPL v3.0 and as commercial software.
- * For commercial licensing, contact us at hello@quickwit.io.
- *
- * AGPL:
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -32,7 +30,7 @@ use quickwit_indexing::source::{SourceConfig, VecSourceParams};
 use quickwit_metastore::checkpoint::Checkpoint;
 use quickwit_metastore::{
     IndexMetadata, Metastore, MetastoreUriResolver, SplitMetadata, SplitMetadataAndFooterOffsets,
-    SplitState,
+    SplitState
 };
 use quickwit_storage::StorageUriResolver;
 
@@ -45,21 +43,21 @@ pub struct TestSandbox {
     index_id: String,
     storage_uri_resolver: StorageUriResolver,
     metastore: Arc<dyn Metastore>,
-    add_docs_id: AtomicUsize,
+    add_docs_id: AtomicUsize
 }
 
 impl TestSandbox {
     /// Creates a new test environment.
     pub async fn create(
         index_id: &str,
-        index_config: Arc<dyn IndexConfig>,
+        index_config: Arc<dyn IndexConfig>
     ) -> anyhow::Result<Self> {
         let metastore_uri = "ram://quickwit-test-indices";
         let index_metadata = IndexMetadata {
             index_id: index_id.to_string(),
             index_uri: format!("{}/{}", metastore_uri, index_id),
             index_config,
-            checkpoint: Checkpoint::default(),
+            checkpoint: Checkpoint::default()
         };
         let storage_uri_resolver = StorageUriResolver::for_test();
         let metastore_uri_resolver = MetastoreUriResolver::default();
@@ -69,7 +67,7 @@ impl TestSandbox {
             index_id: index_id.to_string(),
             storage_uri_resolver,
             metastore,
-            add_docs_id: AtomicUsize::default(),
+            add_docs_id: AtomicUsize::default()
         })
     }
 
@@ -80,7 +78,7 @@ impl TestSandbox {
     pub async fn add_documents<I>(&self, split_docs: I) -> anyhow::Result<IndexingStatistics>
     where
         I: IntoIterator<Item = serde_json::Value> + 'static,
-        I::IntoIter: Send,
+        I::IntoIter: Send
     {
         let docs: Vec<String> = split_docs
             .into_iter()
@@ -92,8 +90,8 @@ impl TestSandbox {
             params: serde_json::to_value(VecSourceParams {
                 items: docs,
                 batch_num_docs: 10,
-                partition: format!("add_docs{}", self.add_docs_id.load(Ordering::SeqCst)),
-            })?,
+                partition: format!("add_docs{}", self.add_docs_id.load(Ordering::SeqCst))
+            })?
         };
         self.add_docs_id.fetch_add(1, Ordering::SeqCst);
         let indexer_params = IndexerParams {
@@ -101,15 +99,15 @@ impl TestSandbox {
             heap_size: Byte::from_bytes(100_000_000),
             commit_policy: CommitPolicy {
                 timeout: Duration::from_secs(3600),
-                num_docs_threshold: 5_000_000,
-            },
+                num_docs_threshold: 5_000_000
+            }
         };
         let statistics = index_data(
             self.index_id.clone(),
             self.metastore.clone(),
             indexer_params,
             source_config,
-            self.storage_uri_resolver.clone(),
+            self.storage_uri_resolver.clone()
         )
         .await?;
         Ok(statistics)
@@ -142,8 +140,8 @@ pub fn mock_split_meta(split_id: &str) -> SplitMetadataAndFooterOffsets {
             time_range: None,
             generation: 1,
             update_timestamp: 0,
-            tags: Default::default(),
-        },
+            tags: Default::default()
+        }
     }
 }
 
@@ -151,8 +149,9 @@ pub fn mock_split_meta(split_id: &str) -> SplitMetadataAndFooterOffsets {
 mod tests {
     use std::sync::Arc;
 
-    use super::TestSandbox;
     use quickwit_index_config::WikipediaIndexConfig;
+
+    use super::TestSandbox;
 
     #[tokio::test]
     async fn test_test_sandbox() -> anyhow::Result<()> {

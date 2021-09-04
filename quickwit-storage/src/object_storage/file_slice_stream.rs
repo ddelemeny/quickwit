@@ -1,24 +1,21 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
-
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::io::{self, SeekFrom};
 use std::ops::Range;
@@ -36,18 +33,17 @@ use tokio_util::io::ReaderStream;
 #[derive(Debug)]
 pub struct FileSliceStream<R> {
     inner: ReaderStream<R>,
-    remaining: u64,
+    remaining: u64
 }
 
 impl<R> FileSliceStream<R>
-where
-    R: AsyncRead + AsyncSeek + Unpin,
+where R: AsyncRead + AsyncSeek + Unpin
 {
     pub async fn try_new(mut reader: R, range: Range<u64>) -> io::Result<Self> {
         if range.end < range.start {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("range.end({}) < range.start ({})", range.end, range.start),
+                format!("range.end({}) < range.start ({})", range.end, range.start)
             ));
         }
 
@@ -56,14 +52,13 @@ where
 
         Ok(FileSliceStream {
             inner: ReaderStream::new(reader),
-            remaining: range.end - range.start,
+            remaining: range.end - range.start
         })
     }
 }
 
 impl<R> Stream for FileSliceStream<R>
-where
-    R: AsyncRead + Unpin,
+where R: AsyncRead + Unpin
 {
     type Item = io::Result<Bytes>;
 
@@ -85,9 +80,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use bytes::Bytes;
     use futures::StreamExt;
-    use std::io::Cursor;
 
     use crate::object_storage::file_slice_stream::FileSliceStream;
 

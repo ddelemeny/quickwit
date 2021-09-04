@@ -1,22 +1,21 @@
-//  Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::fs;
 use std::net::SocketAddr;
@@ -25,15 +24,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::error::{ClusterError, ClusterResult};
 use quickwit_swim::prelude::{
     ArtilleryError, ArtilleryMember, ArtilleryMemberEvent, ArtilleryMemberState,
-    Cluster as ArtilleryCluster, ClusterConfig as ArtilleryClusterConfig,
+    Cluster as ArtilleryCluster, ClusterConfig as ArtilleryClusterConfig
 };
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+
+use crate::error::{ClusterError, ClusterResult};
 
 /// The ID that makes the cluster unique.
 const CLUSTER_ID: &str = "quickwit-cluster";
@@ -49,11 +49,11 @@ pub fn read_host_key(host_key_path: &Path) -> ClusterResult<Uuid> {
     if host_key_path.exists() {
         let host_key_contents =
             fs::read(host_key_path).map_err(|err| ClusterError::ReadHostKeyError {
-                message: err.to_string(),
+                message: err.to_string()
             })?;
         host_key = Uuid::from_slice(host_key_contents.as_slice()).map_err(|err| {
             ClusterError::ReadHostKeyError {
-                message: err.to_string(),
+                message: err.to_string()
             }
         })?;
         info!(host_key=?host_key, host_key_path=?host_key_path, "Read existing host key.");
@@ -61,14 +61,14 @@ pub fn read_host_key(host_key_path: &Path) -> ClusterResult<Uuid> {
         if let Some(dir) = host_key_path.parent() {
             if !dir.exists() {
                 fs::create_dir_all(dir).map_err(|err| ClusterError::WriteHostKeyError {
-                    message: err.to_string(),
+                    message: err.to_string()
                 })?;
             }
         }
         host_key = Uuid::new_v4();
         fs::write(host_key_path, host_key.as_bytes()).map_err(|err| {
             ClusterError::WriteHostKeyError {
-                message: err.to_string(),
+                message: err.to_string()
             }
         })?;
         info!(host_key=?host_key, host_key_path=?host_key_path, "Create new host key.");
@@ -87,7 +87,7 @@ pub struct Member {
     pub listen_addr: SocketAddr,
 
     /// If true, it means self.
-    pub is_self: bool,
+    pub is_self: bool
 }
 
 /// This is an implementation of a cluster using the SWIM protocol.
@@ -105,7 +105,7 @@ pub struct Cluster {
     /// Once the cluster is created, a task to monitor cluster events will be started.
     /// Nodes do not need to be monitored for events once they are detached from the cluster.
     /// You need to update this value to get out of the task loop.
-    stop: Arc<AtomicBool>,
+    stop: Arc<AtomicBool>
 }
 
 impl Cluster {
@@ -123,11 +123,11 @@ impl Cluster {
             ArtilleryCluster::create_and_start(host_key, config).map_err(|err| match err {
                 ArtilleryError::Io(io_err) => ClusterError::UDPPortBindingError {
                     port: listen_addr.port(),
-                    message: io_err.to_string(),
+                    message: io_err.to_string()
                 },
                 _ => ClusterError::CreateClusterError {
-                    message: err.to_string(),
-                },
+                    message: err.to_string()
+                }
             })?;
 
         let (members_sender, members_receiver) = watch::channel(Vec::new());
@@ -137,14 +137,14 @@ impl Cluster {
             listen_addr,
             artillery_cluster,
             members: members_receiver,
-            stop: Arc::new(AtomicBool::new(false)),
+            stop: Arc::new(AtomicBool::new(false))
         };
 
         // Add itself as the initial member of the cluster.
         let member = Member {
             host_key,
             listen_addr,
-            is_self: true,
+            is_self: true
         };
         let initial_members: Vec<Member> = vec![member];
         if members_sender.send(initial_members).is_err() {
@@ -165,7 +165,7 @@ impl Cluster {
                             .into_iter()
                             .filter(|member| match member.state() {
                                 ArtilleryMemberState::Alive | ArtilleryMemberState::Suspect => true,
-                                ArtilleryMemberState::Down | ArtilleryMemberState::Left => false,
+                                ArtilleryMemberState::Down | ArtilleryMemberState::Left => false
                             })
                             .map(|member| convert_member(member, task_listen_addr))
                             .collect();
@@ -228,7 +228,7 @@ fn convert_member(member: ArtilleryMember, self_listen_addr: SocketAddr) -> Memb
     Member {
         host_key: member.host_key(),
         listen_addr,
-        is_self: member.is_current(),
+        is_self: member.is_current()
     }
 }
 
@@ -259,9 +259,8 @@ fn log_artillery_event(artillery_member_event: ArtilleryMemberEvent) {
 #[cfg(test)]
 mod tests {
     use std::net::SocketAddr;
-    use std::thread;
-    use std::time;
     use std::time::Duration;
+    use std::{thread, time};
 
     use quickwit_swim::prelude::{ArtilleryMember, ArtilleryMemberState};
 
@@ -309,7 +308,7 @@ mod tests {
             let expected = Member {
                 host_key,
                 listen_addr: remote_host,
-                is_self: false,
+                is_self: false
             };
 
             assert_eq!(member, expected);
@@ -325,7 +324,7 @@ mod tests {
             let expected = Member {
                 host_key,
                 listen_addr: remote_host,
-                is_self: true,
+                is_self: true
             };
 
             assert_eq!(member, expected);

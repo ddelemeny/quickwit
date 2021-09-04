@@ -1,46 +1,39 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::time::Duration;
 
 use crate::async_actor::spawn_async_actor;
-use crate::scheduler::SchedulerMessage;
-use crate::scheduler::TimeShift;
+use crate::scheduler::{SchedulerMessage, TimeShift};
 use crate::sync_actor::spawn_sync_actor;
-use crate::Actor;
-use crate::ActorHandle;
-use crate::AsyncActor;
-use crate::KillSwitch;
-use crate::Mailbox;
-use crate::QueueCapacity;
-use crate::Scheduler;
-use crate::SyncActor;
+use crate::{
+    Actor, ActorHandle, AsyncActor, KillSwitch, Mailbox, QueueCapacity, Scheduler, SyncActor
+};
 
 /// Universe serves as the top-level context in which Actor can be spawned.
-/// It is *not* a singleton. A typical application will usually have only one universe hosting all of the actors
-/// but it is not a requirement.
+/// It is *not* a singleton. A typical application will usually have only one universe hosting all
+/// of the actors but it is not a requirement.
 ///
 /// In particular, unit test all have their own universe and hence can be executed in parallel.
 pub struct Universe {
     scheduler_mailbox: Mailbox<<Scheduler as Actor>::Message>,
-    kill_switch: KillSwitch,
+    kill_switch: KillSwitch
 }
 
 impl Universe {
@@ -55,7 +48,7 @@ impl Universe {
             spawn_async_actor(scheduler, kill_switch.clone(), mailbox);
         Universe {
             scheduler_mailbox,
-            kill_switch,
+            kill_switch
         }
     }
 
@@ -76,7 +69,7 @@ impl Universe {
             .scheduler_mailbox
             .send_message(SchedulerMessage::SimulateAdvanceTime {
                 time_shift: TimeShift::ByDuration(duration),
-                tx,
+                tx
             })
             .await;
         let _ = rx.await;
@@ -84,23 +77,23 @@ impl Universe {
 
     pub fn spawn_async_actor<A: AsyncActor>(
         &self,
-        actor: A,
+        actor: A
     ) -> (Mailbox<A::Message>, ActorHandle<A>) {
         spawn_async_actor(
             actor,
             self.kill_switch.clone(),
-            self.scheduler_mailbox.clone(),
+            self.scheduler_mailbox.clone()
         )
     }
 
     pub fn spawn_sync_actor<A: SyncActor>(
         &self,
-        actor: A,
+        actor: A
     ) -> (Mailbox<A::Message>, ActorHandle<A>) {
         spawn_sync_actor(
             actor,
             self.kill_switch.clone(),
-            self.scheduler_mailbox.clone(),
+            self.scheduler_mailbox.clone()
         )
     }
 
@@ -108,7 +101,7 @@ impl Universe {
     pub async fn send_message<M>(
         &self,
         mailbox: &Mailbox<M>,
-        msg: M,
+        msg: M
     ) -> Result<(), crate::SendError> {
         mailbox.send_message(msg).await
     }
@@ -126,15 +119,11 @@ mod tests {
 
     use async_trait::async_trait;
 
-    use crate::Actor;
-    use crate::ActorContext;
-    use crate::ActorExitStatus;
-    use crate::AsyncActor;
-    use crate::Universe;
+    use crate::{Actor, ActorContext, ActorExitStatus, AsyncActor, Universe};
 
     #[derive(Default)]
     pub struct ActorWithSchedule {
-        count: usize,
+        count: usize
     }
 
     impl Actor for ActorWithSchedule {
@@ -151,7 +140,7 @@ mod tests {
     impl AsyncActor for ActorWithSchedule {
         async fn initialize(
             &mut self,
-            ctx: &ActorContext<Self::Message>,
+            ctx: &ActorContext<Self::Message>
         ) -> Result<(), ActorExitStatus> {
             self.process_message((), ctx).await
         }
@@ -159,7 +148,7 @@ mod tests {
         async fn process_message(
             &mut self,
             _: (),
-            ctx: &ActorContext<Self::Message>,
+            ctx: &ActorContext<Self::Message>
         ) -> Result<(), ActorExitStatus> {
             self.count += 1;
             ctx.schedule_self_msg(Duration::from_secs(60), ()).await;

@@ -1,22 +1,21 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::hash::Hash;
 use std::ops::Range;
@@ -30,12 +29,12 @@ use super::memory_sized_cache::MemorySizedCache;
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
 struct SliceAddress {
     pub path: PathBuf,
-    pub byte_range: Range<usize>,
+    pub byte_range: Range<usize>
 }
 
 /// A simple in-resident memory slice cache.
 pub struct SliceCache {
-    inner: Mutex<MemorySizedCache<SliceAddress>>,
+    inner: Mutex<MemorySizedCache<SliceAddress>>
 }
 
 impl SliceCache {
@@ -43,15 +42,15 @@ impl SliceCache {
     pub fn with_capacity_in_bytes(capacity_in_bytes: usize) -> Self {
         SliceCache {
             inner: Mutex::new(MemorySizedCache::<SliceAddress>::with_capacity_in_bytes(
-                capacity_in_bytes,
-            )),
+                capacity_in_bytes
+            ))
         }
     }
 
     /// Creates a slice cache that nevers removes any entry.
     pub fn with_infinite_capacity() -> Self {
         SliceCache {
-            inner: Mutex::new(MemorySizedCache::with_infinite_capacity()),
+            inner: Mutex::new(MemorySizedCache::with_infinite_capacity())
         }
     }
 
@@ -59,7 +58,7 @@ impl SliceCache {
     pub fn get(&self, path: &Path, bytes_range: Range<usize>) -> Option<Bytes> {
         let slice_addr = SliceAddress {
             path: path.to_path_buf(),
-            byte_range: bytes_range,
+            byte_range: bytes_range
         };
         self.inner.lock().unwrap().get(&slice_addr)
     }

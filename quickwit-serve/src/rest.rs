@@ -1,23 +1,21 @@
-/*
- * Copyright (C) 2021 Quickwit Inc.
- *
- * Quickwit is offered under the AGPL v3.0 and as commercial software.
- * For commercial licensing, contact us at hello@quickwit.io.
- *
- * AGPL:
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -25,15 +23,14 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use futures::stream::{self, StreamExt};
+use quickwit_cluster::service::ClusterServiceImpl;
+use quickwit_proto::OutputFormat;
+use quickwit_search::{SearchResultJson, SearchService, SearchServiceImpl};
 use serde::{Deserialize, Deserializer};
 use tracing::*;
 use warp::hyper::header::CONTENT_TYPE;
 use warp::hyper::StatusCode;
 use warp::{reply, Filter, Rejection, Reply};
-
-use quickwit_cluster::service::ClusterServiceImpl;
-use quickwit_proto::OutputFormat;
-use quickwit_search::{SearchResultJson, SearchService, SearchServiceImpl};
 
 use crate::http_handler::cluster::cluster_handler;
 use crate::http_handler::health_check::liveness_check_handler;
@@ -43,7 +40,7 @@ use crate::ApiError;
 pub async fn start_rest_service(
     rest_addr: SocketAddr,
     search_service: Arc<SearchServiceImpl>,
-    cluster_service: Arc<ClusterServiceImpl>,
+    cluster_service: Arc<ClusterServiceImpl>
 ) -> anyhow::Result<()> {
     info!(rest_addr=?rest_addr, "Start REST service.");
     let rest_routes = liveness_check_handler()
@@ -64,7 +61,7 @@ fn default_max_hits() -> u64 {
 #[serde(rename_all = "lowercase")]
 pub enum Format {
     Json,
-    PrettyJson,
+    PrettyJson
 }
 
 impl Default for Format {
@@ -77,7 +74,7 @@ impl ToString for Format {
     fn to_string(&self) -> String {
         match &self {
             Self::Json => "json".to_string(),
-            Self::PrettyJson => "prety-json".to_string(),
+            Self::PrettyJson => "prety-json".to_string()
         }
     }
 }
@@ -86,7 +83,7 @@ impl Format {
     fn resp_body<T: serde::Serialize>(self, val: T) -> serde_json::Result<String> {
         match self {
             Format::Json => serde_json::to_string(&val),
-            Format::PrettyJson => serde_json::to_string_pretty(&val),
+            Format::PrettyJson => serde_json::to_string_pretty(&val)
         }
     }
 
@@ -144,13 +141,13 @@ pub struct SearchRequestQueryString {
     /// The tag filter.
     #[serde(default)]
     #[serde(deserialize_with = "from_simple_list")]
-    pub tags: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>
 }
 
 async fn search_endpoint<TSearchService: SearchService>(
     index_id: String,
     search_request: SearchRequestQueryString,
-    search_service: &TSearchService,
+    search_service: &TSearchService
 ) -> Result<SearchResultJson, ApiError> {
     let search_request = quickwit_proto::SearchRequest {
         index_id,
@@ -160,7 +157,7 @@ async fn search_endpoint<TSearchService: SearchService>(
         end_timestamp: search_request.end_timestamp,
         max_hits: search_request.max_hits,
         start_offset: search_request.start_offset,
-        tags: search_request.tags.unwrap_or_default(),
+        tags: search_request.tags.unwrap_or_default()
     };
     let search_result = search_service.root_search(search_request).await?;
     let search_result_json = SearchResultJson::from(search_result);
@@ -177,7 +174,7 @@ fn search_filter(
 async fn search<TSearchService: SearchService>(
     index_id: String,
     request: SearchRequestQueryString,
-    search_service: Arc<TSearchService>,
+    search_service: Arc<TSearchService>
 ) -> Result<impl warp::Reply, Infallible> {
     info!(index_id=%index_id,request=?request, "search");
     Ok(request
@@ -189,7 +186,7 @@ async fn search<TSearchService: SearchService>(
 ///
 /// It parses the search request from the
 pub fn search_handler<TSearchService: SearchService>(
-    search_service: Arc<TSearchService>,
+    search_service: Arc<TSearchService>
 ) -> impl Filter<Extract = impl warp::Reply, Error = Rejection> + Clone {
     search_filter()
         .and(warp::any().map(move || search_service.clone()))
@@ -222,13 +219,13 @@ pub struct SearchStreamRequestQueryString {
     /// The tag filter.
     #[serde(default)]
     #[serde(deserialize_with = "from_simple_list")]
-    pub tags: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>
 }
 
 async fn search_stream_endpoint<TSearchService: SearchService>(
     index_id: String,
     search_request: SearchStreamRequestQueryString,
-    search_service: &TSearchService,
+    search_service: &TSearchService
 ) -> Result<hyper::Body, ApiError> {
     let request = quickwit_proto::SearchStreamRequest {
         index_id,
@@ -238,7 +235,7 @@ async fn search_stream_endpoint<TSearchService: SearchService>(
         end_timestamp: search_request.end_timestamp,
         fast_field: search_request.fast_field,
         output_format: search_request.output_format as i32,
-        tags: search_request.tags.unwrap_or_default(),
+        tags: search_request.tags.unwrap_or_default()
     };
     let data = search_service.root_search_stream(request).await?;
     let stream = stream::iter(data).map(Result::<Bytes, std::io::Error>::Ok);
@@ -264,12 +261,12 @@ fn make_streaming_reply(result: Result<hyper::Body, ApiError>) -> impl Reply {
 async fn search_stream<TSearchService: SearchService>(
     index_id: String,
     request: SearchStreamRequestQueryString,
-    search_service: Arc<TSearchService>,
+    search_service: Arc<TSearchService>
 ) -> Result<impl warp::Reply, Infallible> {
     info!(index_id=%index_id,request=?request, "search_stream");
     let content_type = match request.output_format {
         OutputFormat::ClickHouseRowBinary => "application/octet-stream",
-        OutputFormat::Csv => "text/csv",
+        OutputFormat::Csv => "text/csv"
     };
     let reply =
         make_streaming_reply(search_stream_endpoint(index_id, request, &*search_service).await);
@@ -285,7 +282,7 @@ fn search_stream_filter(
 }
 
 pub fn search_stream_handler<TSearchService: SearchService>(
-    search_service: Arc<TSearchService>,
+    search_service: Arc<TSearchService>
 ) -> impl Filter<Extract = impl warp::Reply, Error = Rejection> + Clone {
     search_stream_filter()
         .and(warp::any().map(move || search_service.clone()))
@@ -300,42 +297,41 @@ async fn recover_fn(rejection: Rejection) -> Result<impl Reply, Rejection> {
             // The querystring was incorrect.
             Ok(
                 Format::PrettyJson.make_reply(Err::<(), ApiError>(ApiError::InvalidArgument(
-                    err.to_string(),
-                ))),
+                    err.to_string()
+                )))
             )
         }
-        None => Ok(Format::PrettyJson.make_reply(Err::<(), ApiError>(ApiError::NotFound))),
+        None => Ok(Format::PrettyJson.make_reply(Err::<(), ApiError>(ApiError::NotFound)))
     }
 }
 
 fn from_simple_list<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
-where
-    D: Deserializer<'de>,
-{
+where D: Deserializer<'de> {
     let str_sequence = String::deserialize(deserializer)?;
     Ok(Some(
         str_sequence
             .trim_matches(',')
             .split(',')
             .map(|item| item.to_owned())
-            .collect(),
+            .collect()
     ))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use assert_json_diff::assert_json_include;
     use mockall::predicate;
     use quickwit_search::{MockSearchService, SearchError};
     use serde_json::json;
+
+    use super::*;
 
     #[test]
     fn test_serialize_search_results() -> anyhow::Result<()> {
         let search_results = SearchResultJson {
             num_hits: 55,
             hits: Vec::new(),
-            num_microsecs: 0u64,
+            num_microsecs: 0u64
         };
         let search_results_json: serde_json::Value = serde_json::to_value(&search_results)?;
         let expected_json: serde_json::Value = json!({
@@ -351,10 +347,13 @@ mod tests {
     async fn test_rest_search_api_route_simple() {
         let rest_search_api_filter = search_filter();
         let (index, req) = warp::test::request()
-        .path("/api/v1/quickwit-demo-index/search?query=*&endTimestamp=1450720000&maxHits=10&startOffset=22")
-        .filter(&rest_search_api_filter)
-        .await
-        .unwrap();
+            .path(
+                "/api/v1/quickwit-demo-index/search?query=*&endTimestamp=1450720000&maxHits=10&\
+                 startOffset=22"
+            )
+            .filter(&rest_search_api_filter)
+            .await
+            .unwrap();
         assert_eq!(&index, "quickwit-demo-index");
         assert_eq!(
             &req,
@@ -366,7 +365,7 @@ mod tests {
                 max_hits: 10,
                 start_offset: 22,
                 format: Format::default(),
-                tags: None,
+                tags: None
             }
         );
     }
@@ -375,7 +374,10 @@ mod tests {
     async fn test_rest_search_api_route_simple_default_num_hits_default_offset() {
         let rest_search_api_filter = search_filter();
         let (index, req) = warp::test::request()
-            .path("/api/v1/quickwit-demo-index/search?query=*&endTimestamp=1450720000&searchField=title,body")
+            .path(
+                "/api/v1/quickwit-demo-index/search?query=*&endTimestamp=1450720000&\
+                 searchField=title,body"
+            )
             .filter(&rest_search_api_filter)
             .await
             .unwrap();
@@ -390,7 +392,7 @@ mod tests {
                 max_hits: 20,
                 start_offset: 0,
                 format: Format::default(),
-                tags: None,
+                tags: None
             }
         );
     }
@@ -414,7 +416,7 @@ mod tests {
                 start_offset: 0,
                 format: Format::Json,
                 search_fields: None,
-                tags: None,
+                tags: None
             }
         );
     }
@@ -445,7 +447,7 @@ mod tests {
                 hits: Vec::new(),
                 num_hits: 10,
                 elapsed_time_micros: 16,
-                errors: vec![],
+                errors: vec![]
             })
         });
         let rest_search_api_handler =
@@ -473,7 +475,7 @@ mod tests {
             .with(predicate::function(
                 |search_request: &quickwit_proto::SearchRequest| {
                     search_request.start_offset == 5 && search_request.max_hits == 30
-                },
+                }
             ))
             .returning(|_| Ok(Default::default()));
         let rest_search_api_handler =
@@ -494,7 +496,7 @@ mod tests {
         let mut mock_search_service = MockSearchService::new();
         mock_search_service.expect_root_search().returning(|_| {
             Err(SearchError::IndexDoesNotExist {
-                index_id: "not-found-index".to_string(),
+                index_id: "not-found-index".to_string()
             })
         });
         let rest_search_api_handler =
@@ -558,7 +560,7 @@ mod tests {
             super::search_stream_handler(Arc::new(mock_search_service)).recover(recover_fn);
         let response = warp::test::request()
             .path(
-                "/api/v1/my-index/search/stream?query=obama&fastField=external_id&outputFormat=csv",
+                "/api/v1/my-index/search/stream?query=obama&fastField=external_id&outputFormat=csv"
             )
             .reply(&rest_search_stream_api_handler)
             .await;
@@ -572,7 +574,7 @@ mod tests {
     async fn test_rest_search_stream_api_csv() {
         let (index, req) = warp::test::request()
             .path(
-                "/api/v1/my-index/search/stream?query=obama&fastField=external_id&outputFormat=csv",
+                "/api/v1/my-index/search/stream?query=obama&fastField=external_id&outputFormat=csv"
             )
             .filter(&super::search_stream_filter())
             .await
@@ -587,7 +589,7 @@ mod tests {
                 end_timestamp: None,
                 fast_field: "external_id".to_string(),
                 output_format: OutputFormat::Csv,
-                tags: None,
+                tags: None
             }
         );
     }
@@ -595,7 +597,10 @@ mod tests {
     #[tokio::test]
     async fn test_rest_search_stream_api_click_house_row_binary() {
         let (index, req) = warp::test::request()
-            .path("/api/v1/my-index/search/stream?query=obama&fastField=external_id&outputFormat=clickHouseRowBinary&tags=lang:english")
+            .path(
+                "/api/v1/my-index/search/stream?query=obama&fastField=external_id&\
+                 outputFormat=clickHouseRowBinary&tags=lang:english"
+            )
             .filter(&super::search_stream_filter())
             .await
             .unwrap();
@@ -609,7 +614,7 @@ mod tests {
                 end_timestamp: None,
                 fast_field: "external_id".to_string(),
                 output_format: OutputFormat::ClickHouseRowBinary,
-                tags: Some(vec!["lang:english".to_string()]),
+                tags: Some(vec!["lang:english".to_string()])
             }
         );
     }
@@ -617,11 +622,18 @@ mod tests {
     #[tokio::test]
     async fn test_rest_search_stream_api_error() {
         let rejection = warp::test::request()
-            .path("/api/v1/my-index/search/stream?query=obama&fastField=external_id&outputFormat=click_house_row_binary")
+            .path(
+                "/api/v1/my-index/search/stream?query=obama&fastField=external_id&\
+                 outputFormat=click_house_row_binary"
+            )
             .filter(&super::search_stream_filter())
             .await
             .unwrap_err();
         let parse_error = rejection.find::<serde_qs::Error>().unwrap();
-        assert_eq!(parse_error.to_string(), "failed with reason: unknown variant `click_house_row_binary`, expected `csv` or `clickHouseRowBinary`");
+        assert_eq!(
+            parse_error.to_string(),
+            "failed with reason: unknown variant `click_house_row_binary`, expected `csv` or \
+             `clickHouseRowBinary`"
+        );
     }
 }

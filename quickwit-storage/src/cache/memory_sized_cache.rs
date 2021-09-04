@@ -1,22 +1,21 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::borrow::Borrow;
 use std::hash::Hash;
@@ -25,24 +24,25 @@ use std::sync::Mutex;
 use bytes::Bytes;
 use lru::{KeyRef, LruCache};
 use tracing::{error, warn};
+
 #[derive(Clone, Copy, Debug)]
 enum Capacity {
     Unlimited,
-    InBytes(usize),
+    InBytes(usize)
 }
 
 impl Capacity {
     fn exceeds_capacity(&self, num_bytes: usize) -> bool {
         match *self {
             Capacity::Unlimited => false,
-            Capacity::InBytes(capacity_in_bytes) => num_bytes > capacity_in_bytes,
+            Capacity::InBytes(capacity_in_bytes) => num_bytes > capacity_in_bytes
         }
     }
 }
 struct NeedMutMemorySizedCache<K: Hash + Eq> {
     lru_cache: LruCache<K, Bytes>,
     num_bytes: usize,
-    capacity: Capacity,
+    capacity: Capacity
 }
 
 impl<K: Hash + Eq> NeedMutMemorySizedCache<K> {
@@ -54,14 +54,14 @@ impl<K: Hash + Eq> NeedMutMemorySizedCache<K> {
             // Enforcing this limit is done in the `NeedMutCache` impl.
             lru_cache: LruCache::unbounded(),
             num_bytes: 0,
-            capacity,
+            capacity
         }
     }
 
     pub fn get<Q>(&mut self, cache_key: &Q) -> Option<Bytes>
     where
         KeyRef<K>: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
+        Q: Hash + Eq + ?Sized
     {
         self.lru_cache.get(cache_key).cloned()
     }
@@ -86,7 +86,11 @@ impl<K: Hash + Eq> NeedMutMemorySizedCache<K> {
             if let Some((_, bytes)) = self.lru_cache.pop_lru() {
                 self.num_bytes -= bytes.len();
             } else {
-                error!("Logical error. Even after removing all of the items in the cache the capacity is insufficient. This case is guarded against and should never happen.");
+                error!(
+                    "Logical error. Even after removing all of the items in the cache the \
+                     capacity is insufficient. This case is guarded against and should never \
+                     happen."
+                );
                 return;
             }
         }
@@ -97,7 +101,7 @@ impl<K: Hash + Eq> NeedMutMemorySizedCache<K> {
 
 /// A simple in-resident memory slice cache.
 pub struct MemorySizedCache<K: Hash + Eq> {
-    inner: Mutex<NeedMutMemorySizedCache<K>>,
+    inner: Mutex<NeedMutMemorySizedCache<K>>
 }
 
 impl<K: Hash + Eq> MemorySizedCache<K> {
@@ -105,15 +109,15 @@ impl<K: Hash + Eq> MemorySizedCache<K> {
     pub fn with_capacity_in_bytes(capacity_in_bytes: usize) -> Self {
         MemorySizedCache {
             inner: Mutex::new(NeedMutMemorySizedCache::with_capacity(Capacity::InBytes(
-                capacity_in_bytes,
-            ))),
+                capacity_in_bytes
+            )))
         }
     }
 
     /// Creates a slice cache that nevers removes any entry.
     pub fn with_infinite_capacity() -> Self {
         MemorySizedCache {
-            inner: Mutex::new(NeedMutMemorySizedCache::with_capacity(Capacity::Unlimited)),
+            inner: Mutex::new(NeedMutMemorySizedCache::with_capacity(Capacity::Unlimited))
         }
     }
 
@@ -121,7 +125,7 @@ impl<K: Hash + Eq> MemorySizedCache<K> {
     pub fn get<Q>(&self, cache_key: &Q) -> Option<Bytes>
     where
         KeyRef<K>: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
+        Q: Hash + Eq + ?Sized
     {
         self.inner.lock().unwrap().get(cache_key)
     }

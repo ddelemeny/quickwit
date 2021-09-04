@@ -1,24 +1,21 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
-
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::fmt::{self, Debug};
 use std::io;
@@ -29,31 +26,27 @@ use std::time::Duration;
 use anyhow::Context;
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures::stream;
-use futures::StreamExt;
+use futures::{stream, StreamExt};
 use once_cell::sync::OnceCell;
 use regex::Regex;
-use tokio::fs::File;
-use tokio_util::io::ReaderStream;
-use tracing::warn;
-
 use rusoto_core::credential::{AutoRefreshingProvider, ChainProvider};
 use rusoto_core::{ByteStream, HttpClient, HttpConfig, Region, RusotoError};
 use rusoto_s3::{
     AbortMultipartUploadRequest, CompleteMultipartUploadRequest, CompletedMultipartUpload,
     CompletedPart, CreateMultipartUploadError, CreateMultipartUploadRequest, DeleteObjectRequest,
     GetObjectRequest, HeadObjectError, HeadObjectRequest, PutObjectError, PutObjectRequest,
-    S3Client, UploadPartRequest, S3,
+    S3Client, UploadPartRequest, S3
 };
+use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio_util::io::ReaderStream;
+use tracing::warn;
 
 use super::error::RusotoErrorWrapper;
-
 use crate::object_storage::file_slice_stream::FileSliceStream;
 use crate::object_storage::MultiPartPolicy;
 use crate::retry::{retry, IsRetryable, Retry};
-use crate::{PutPayload, Storage, StorageErrorKind};
-use crate::{StorageError, StorageResult};
+use crate::{PutPayload, Storage, StorageError, StorageErrorKind, StorageResult};
 
 /// A credential timeout.
 const CREDENTIAL_TIMEOUT: u64 = 5;
@@ -66,7 +59,7 @@ pub struct S3CompatibleObjectStorage {
     s3_client: S3Client,
     bucket: String,
     prefix: PathBuf,
-    multipart_policy: MultiPartPolicy,
+    multipart_policy: MultiPartPolicy
 }
 
 impl fmt::Debug for S3CompatibleObjectStorage {
@@ -93,7 +86,7 @@ fn create_s3_client(region: Region) -> anyhow::Result<S3Client> {
     Ok(S3Client::new_with(
         http_client,
         credentials_provider,
-        region,
+        region
     ))
 }
 
@@ -105,7 +98,7 @@ impl S3CompatibleObjectStorage {
             s3_client,
             bucket: bucket.to_string(),
             prefix: PathBuf::new(),
-            multipart_policy: MultiPartPolicy::default(),
+            multipart_policy: MultiPartPolicy::default()
         })
     }
 
@@ -128,7 +121,7 @@ impl S3CompatibleObjectStorage {
             s3_client: self.s3_client,
             bucket: self.bucket,
             prefix: prefix.to_path_buf(),
-            multipart_policy: self.multipart_policy,
+            multipart_policy: self.multipart_policy
         }
     }
 
@@ -154,8 +147,8 @@ pub fn parse_uri(uri: &str) -> Option<(String, PathBuf)> {
                     bucket_match.as_str().to_string(),
                     cap.name("path").map_or_else(
                         || PathBuf::from(""),
-                        |path_match| PathBuf::from(path_match.as_str()),
-                    ),
+                        |path_match| PathBuf::from(path_match.as_str())
+                    )
                 )
             })
         })
@@ -168,7 +161,7 @@ struct MultipartUploadId(pub String);
 struct Part {
     pub part_number: usize,
     pub range: Range<u64>,
-    pub md5: md5::Digest,
+    pub md5: md5::Digest
 }
 
 impl Part {
@@ -196,7 +189,7 @@ fn split_range_into_chunks(len: u64, chunk_size: u64) -> Vec<Range<u64>> {
         .step_by(chunk_size as usize)
         .map(move |start| Range {
             start,
-            end: (start + chunk_size).min(len),
+            end: (start + chunk_size).min(len)
         })
         .collect()
 }
@@ -208,7 +201,7 @@ async fn byte_stream(payload: &PutPayload) -> io::Result<ByteStream> {
             let reader_stream = ReaderStream::new(file);
             Ok(ByteStream::new(reader_stream))
         }
-        PutPayload::InMemory(data) => Ok(ByteStream::from(data.to_vec())),
+        PutPayload::InMemory(data) => Ok(ByteStream::from(data.to_vec()))
     }
 }
 
@@ -226,7 +219,7 @@ impl S3CompatibleObjectStorage {
         &self,
         key: &str,
         payload: PutPayload,
-        len: u64,
+        len: u64
     ) -> Result<(), RusotoErrorWrapper<PutObjectError>> {
         let body = byte_stream(&payload).await?;
         let request = PutObjectRequest {
@@ -247,7 +240,7 @@ impl S3CompatibleObjectStorage {
 
     async fn create_multipart_upload(
         &self,
-        key: &str,
+        key: &str
     ) -> Result<MultipartUploadId, RusotoErrorWrapper<CreateMultipartUploadError>> {
         let create_upload_req = CreateMultipartUploadRequest {
             bucket: self.bucket.clone(),
@@ -272,11 +265,12 @@ impl S3CompatibleObjectStorage {
         &self,
         payload: PutPayload,
         len: u64,
-        part_len: u64,
+        part_len: u64
     ) -> io::Result<Vec<Part>> {
         assert!(len > 0);
         let chunks = split_range_into_chunks(len, part_len);
-        // Note that it should really be the first chunk, but who knows... and it is very cheap to compute this anyway.
+        // Note that it should really be the first chunk, but who knows... and it is very cheap to
+        // compute this anyway.
         let largest_chunk_num_bytes = chunks
             .iter()
             .map(|chunk| chunk.end - chunk.start)
@@ -294,7 +288,7 @@ impl S3CompatibleObjectStorage {
                     let part = Part {
                         part_number: chunk_id + 1, // parts are 1-indexed
                         range: chunk,
-                        md5,
+                        md5
                     };
                     parts.push(part);
                 }
@@ -308,10 +302,10 @@ impl S3CompatibleObjectStorage {
                     Part {
                         part_number: chunk_id + 1, // parts are 1-indexed
                         range,
-                        md5,
+                        md5
                     }
                 })
-                .collect()),
+                .collect())
         }
     }
 
@@ -320,7 +314,7 @@ impl S3CompatibleObjectStorage {
         upload_id: MultipartUploadId,
         key: &str,
         part: Part,
-        payload: PutPayload,
+        payload: PutPayload
     ) -> Result<CompletedPart, Retry<StorageError>> {
         let byte_stream = range_byte_stream(&payload, part.range.clone())
             .await
@@ -351,7 +345,7 @@ impl S3CompatibleObjectStorage {
             })?;
         Ok(CompletedPart {
             e_tag: upload_part_output.e_tag,
-            part_number: Some(part.part_number as i64),
+            part_number: Some(part.part_number as i64)
         })
     }
 
@@ -360,7 +354,7 @@ impl S3CompatibleObjectStorage {
         key: &str,
         payload: PutPayload,
         part_len: u64,
-        len: u64,
+        len: u64
     ) -> StorageResult<()> {
         let upload_id = self
             .create_multipart_upload(key)
@@ -408,10 +402,10 @@ impl S3CompatibleObjectStorage {
         &self,
         key: &str,
         completed_parts: Vec<CompletedPart>,
-        upload_id: &str,
+        upload_id: &str
     ) -> StorageResult<()> {
         let completed_upload = CompletedMultipartUpload {
-            parts: Some(completed_parts),
+            parts: Some(completed_parts)
         };
         let complete_upload_req = CompleteMultipartUploadRequest {
             bucket: self.bucket.clone(),
@@ -450,7 +444,7 @@ impl S3CompatibleObjectStorage {
     fn create_get_object_request(
         &self,
         path: &Path,
-        range_opt: Option<Range<usize>>,
+        range_opt: Option<Range<usize>>
     ) -> GetObjectRequest {
         let key = self.key(path);
         let range_str = range_opt.map(|range| format!("bytes={}-{}", range.start, range.end - 1));
@@ -465,7 +459,7 @@ impl S3CompatibleObjectStorage {
     async fn get_to_vec(
         &self,
         path: &Path,
-        range_opt: Option<Range<usize>>,
+        range_opt: Option<Range<usize>>
     ) -> StorageResult<Vec<u8>> {
         let get_object_req = self.create_get_object_request(path, range_opt);
         let get_object_output = retry(|| async {
@@ -609,7 +603,7 @@ impl Storage for S3CompatibleObjectStorage {
                     path.display()
                 )))
             }
-            Err(err) => Err(err.into()),
+            Err(err) => Err(err.into())
         }
     }
     fn uri(&self) -> String {
@@ -619,8 +613,9 @@ impl Storage for S3CompatibleObjectStorage {
 
 #[cfg(test)]
 mod tests {
-    use crate::object_storage::s3_compatible_storage::split_range_into_chunks;
     use std::path::PathBuf;
+
+    use crate::object_storage::s3_compatible_storage::split_range_into_chunks;
 
     #[test]
     fn test_split_range_into_chunks_inexact() {

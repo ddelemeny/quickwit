@@ -1,38 +1,37 @@
-/*
- * Copyright (C) 2021 Quickwit Inc.
- *
- * Quickwit is offered under the AGPL v3.0 and as commercial software.
- * For commercial licensing, contact us at hello@quickwit.io.
- *
- * AGPL:
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+use std::collections::HashSet;
+
+use async_trait::async_trait;
+
 use crate::mailbox::Command;
 use crate::observation::ObservationType;
-use crate::Actor;
-use crate::ActorHandle;
-use crate::Health;
-use crate::Supervisable;
-use crate::Universe;
-use crate::{ActorContext, ActorExitStatus, AsyncActor, Mailbox, Observation, SyncActor};
-use async_trait::async_trait;
-use std::collections::HashSet;
+use crate::{
+    Actor, ActorContext, ActorExitStatus, ActorHandle, AsyncActor, Health, Mailbox, Observation,
+    Supervisable, SyncActor, Universe
+};
 
 // An actor that receives ping messages.
 #[derive(Default)]
 pub struct PingReceiverSyncActor {
-    ping_count: usize,
+    ping_count: usize
 }
 
 #[derive(Debug, Clone)]
@@ -56,7 +55,7 @@ impl SyncActor for PingReceiverSyncActor {
     fn process_message(
         &mut self,
         _message: Self::Message,
-        _ctx: &ActorContext<Self::Message>,
+        _ctx: &ActorContext<Self::Message>
     ) -> Result<(), ActorExitStatus> {
         self.ping_count += 1;
         Ok(())
@@ -66,7 +65,7 @@ impl SyncActor for PingReceiverSyncActor {
 // An actor that receives ping messages.
 #[derive(Default)]
 pub struct PingReceiverAsyncActor {
-    ping_count: usize,
+    ping_count: usize
 }
 
 impl Actor for PingReceiverAsyncActor {
@@ -88,7 +87,7 @@ impl AsyncActor for PingReceiverAsyncActor {
     async fn process_message(
         &mut self,
         _message: Self::Message,
-        _progress: &ActorContext<Self::Message>,
+        _progress: &ActorContext<Self::Message>
     ) -> Result<(), ActorExitStatus> {
         self.ping_count += 1;
         Ok(())
@@ -97,19 +96,19 @@ impl AsyncActor for PingReceiverAsyncActor {
 #[derive(Default)]
 pub struct PingerAsyncSenderActor {
     count: usize,
-    peers: HashSet<Mailbox<<PingReceiverSyncActor as Actor>::Message>>,
+    peers: HashSet<Mailbox<<PingReceiverSyncActor as Actor>::Message>>
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SenderState {
     pub count: usize,
-    pub num_peers: usize,
+    pub num_peers: usize
 }
 
 #[derive(Debug, Clone)]
 pub enum SenderMessage {
     AddPeer(Mailbox<Ping>),
-    Ping,
+    Ping
 }
 
 impl Actor for PingerAsyncSenderActor {
@@ -123,7 +122,7 @@ impl Actor for PingerAsyncSenderActor {
     fn observable_state(&self) -> Self::ObservableState {
         SenderState {
             count: self.count,
-            num_peers: self.peers.len(),
+            num_peers: self.peers.len()
         }
     }
 }
@@ -133,7 +132,7 @@ impl AsyncActor for PingerAsyncSenderActor {
     async fn process_message(
         &mut self,
         message: SenderMessage,
-        _ctx: &ActorContext<Self::Message>,
+        _ctx: &ActorContext<Self::Message>
     ) -> Result<(), ActorExitStatus> {
         match message {
             SenderMessage::AddPeer(peer) => {
@@ -215,7 +214,7 @@ async fn test_ping_actor() {
         ping_recv_handle.process_pending_and_observe().await,
         Observation {
             obs_type: ObservationType::PostMortem,
-            state: 2,
+            state: 2
         }
     );
     assert_eq!(
@@ -239,7 +238,7 @@ struct BuggyActor;
 #[derive(Debug, Clone)]
 enum BuggyMessage {
     DoNothing,
-    Block,
+    Block
 }
 
 impl Actor for BuggyActor {
@@ -258,7 +257,7 @@ impl AsyncActor for BuggyActor {
     async fn process_message(
         &mut self,
         message: BuggyMessage,
-        ctx: &ActorContext<Self::Message>,
+        ctx: &ActorContext<Self::Message>
     ) -> Result<(), ActorExitStatus> {
         match message {
             BuggyMessage::Block => {
@@ -347,13 +346,13 @@ async fn test_pause_async_actor() {
 #[derive(Default, Debug, Clone)]
 struct LoopingActor {
     pub default_count: usize,
-    pub normal_count: usize,
+    pub normal_count: usize
 }
 
 #[derive(Clone, Debug)]
 enum Msg {
     Looping,
-    Normal,
+    Normal
 }
 
 impl Actor for LoopingActor {
@@ -370,7 +369,7 @@ impl Actor for LoopingActor {
 impl AsyncActor for LoopingActor {
     async fn initialize(
         &mut self,
-        ctx: &ActorContext<Self::Message>,
+        ctx: &ActorContext<Self::Message>
     ) -> Result<(), ActorExitStatus> {
         <LoopingActor as AsyncActor>::process_message(self, Msg::Looping, ctx).await
     }
@@ -378,7 +377,7 @@ impl AsyncActor for LoopingActor {
     async fn process_message(
         &mut self,
         message: Self::Message,
-        _ctx: &ActorContext<Self::Message>,
+        _ctx: &ActorContext<Self::Message>
     ) -> Result<(), ActorExitStatus> {
         match message {
             Msg::Looping => {
@@ -400,7 +399,7 @@ impl SyncActor for LoopingActor {
     fn process_message(
         &mut self,
         message: Self::Message,
-        ctx: &ActorContext<Self::Message>,
+        ctx: &ActorContext<Self::Message>
     ) -> Result<(), ActorExitStatus> {
         match message {
             Msg::Looping => {
@@ -451,7 +450,7 @@ async fn test_looping_sync() -> anyhow::Result<()> {
 
 #[derive(Default)]
 struct SummingActor {
-    sum: u64,
+    sum: u64
 }
 
 impl Actor for SummingActor {
@@ -468,7 +467,7 @@ impl SyncActor for SummingActor {
     fn process_message(
         &mut self,
         add: Self::Message,
-        _ctx: &ActorContext<Self::Message>,
+        _ctx: &ActorContext<Self::Message>
     ) -> Result<(), ActorExitStatus> {
         self.sum += add;
         Ok(())
@@ -478,7 +477,7 @@ impl SyncActor for SummingActor {
 #[derive(Default)]
 struct SpawningActor {
     res: u64,
-    handle_opt: Option<(Mailbox<u64>, ActorHandle<SummingActor>)>,
+    handle_opt: Option<(Mailbox<u64>, ActorHandle<SummingActor>)>
 }
 
 impl Actor for SpawningActor {
@@ -495,7 +494,7 @@ impl AsyncActor for SpawningActor {
     async fn process_message(
         &mut self,
         message: Self::Message,
-        ctx: &ActorContext<Self::Message>,
+        ctx: &ActorContext<Self::Message>
     ) -> Result<(), ActorExitStatus> {
         let (mailbox, _) = self.handle_opt.get_or_insert_with(|| {
             ctx.spawn_sync(SummingActor::default(), ctx.kill_switch().clone())
@@ -507,7 +506,7 @@ impl AsyncActor for SpawningActor {
     async fn finalize(
         &mut self,
         _exit_status: &ActorExitStatus,
-        _ctx: &ActorContext<Self::Message>,
+        _ctx: &ActorContext<Self::Message>
     ) -> anyhow::Result<()> {
         if let Some((_, child_handler)) = self.handle_opt.take() {
             self.res = child_handler.process_pending_and_observe().await.state;

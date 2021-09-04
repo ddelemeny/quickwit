@@ -1,25 +1,23 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use std::sync::atomic::AtomicU32;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 /// Progress makes it possible to register some progress.
@@ -49,7 +47,7 @@ enum ProgressState {
     // to it.
     //
     // The value inside starts at 0.
-    ProtectedZone(u32),
+    ProtectedZone(u32)
 }
 
 #[allow(clippy::from_over_into)]
@@ -58,7 +56,7 @@ impl Into<u32> for ProgressState {
         match self {
             ProgressState::NoUpdate => 0,
             ProgressState::Updated => 1,
-            ProgressState::ProtectedZone(level) => 2 + level,
+            ProgressState::ProtectedZone(level) => 2 + level
         }
     }
 }
@@ -68,7 +66,7 @@ impl From<u32> for ProgressState {
         match level {
             0 => ProgressState::NoUpdate,
             1 => ProgressState::Updated,
-            level => ProgressState::ProtectedZone(level - 2),
+            level => ProgressState::ProtectedZone(level - 2)
         }
     }
 }
@@ -90,7 +88,7 @@ impl Progress {
             let previous_state: ProgressState = self.0.load(Ordering::SeqCst).into();
             let new_state = match previous_state {
                 ProgressState::NoUpdate | ProgressState::Updated => ProgressState::ProtectedZone(0),
-                ProgressState::ProtectedZone(level) => ProgressState::ProtectedZone(level + 1),
+                ProgressState::ProtectedZone(level) => ProgressState::ProtectedZone(level + 1)
             };
             if self
                 .0
@@ -98,7 +96,7 @@ impl Progress {
                     previous_state.into(),
                     new_state.into(),
                     Ordering::SeqCst,
-                    Ordering::SeqCst,
+                    Ordering::SeqCst
                 )
                 .is_ok()
             {
@@ -119,7 +117,7 @@ impl Progress {
                 ProgressState::Updated.into(),
                 ProgressState::NoUpdate.into(),
                 Ordering::Relaxed,
-                Ordering::Relaxed,
+                Ordering::Relaxed
             )
             .unwrap_or_else(|previous_value| previous_value)
             .into();

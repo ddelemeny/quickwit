@@ -1,24 +1,21 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
-
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::io;
 
@@ -45,7 +42,7 @@ pub enum MetastoreError {
     #[error("Internal error: `{message}` Cause: `{cause}`.")]
     InternalError {
         message: String,
-        cause: anyhow::Error,
+        cause: anyhow::Error
     },
 
     #[error("Failed to deserialize index metadata: `{cause}`")]
@@ -61,7 +58,7 @@ pub enum MetastoreError {
     SplitIsNotStaged { split_id: String },
 
     #[error("Publish checkpoint delta overlaps with the current checkpoint: {0:?}.")]
-    IncompatibleCheckpointDelta(#[from] IncompatibleCheckpoint),
+    IncompatibleCheckpointDelta(#[from] IncompatibleCheckpoint)
 }
 
 /// Generic Result type for metastore operations.
@@ -84,5 +81,5 @@ pub enum MetastoreResolverError {
     /// e.g. Connection error, credential error, incompatible version,
     /// internal error in third party, etc.
     #[error("Failed to open metastore: `{0}`")]
-    FailedToOpenMetastore(MetastoreError),
+    FailedToOpenMetastore(MetastoreError)
 }

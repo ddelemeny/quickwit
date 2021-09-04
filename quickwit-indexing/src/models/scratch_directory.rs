@@ -1,31 +1,28 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use std::fmt;
-use std::io;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::{fmt, io};
 enum ScratchDirectoryType {
     Path(PathBuf),
-    TempDir(tempfile::TempDir),
+    TempDir(tempfile::TempDir)
 }
 
 /// Helps creating a hierarchy of temp directory.
@@ -39,7 +36,7 @@ enum ScratchDirectoryType {
 /// life of the directories.
 #[derive(Clone)]
 pub struct ScratchDirectory {
-    inner: Arc<Inner>,
+    inner: Arc<Inner>
 }
 
 impl fmt::Debug for ScratchDirectory {
@@ -55,7 +52,7 @@ struct Inner {
     // The goal of this handle to _parent is just to ensure that it does not get deleted before
     // its child.
     _parent: Option<Arc<Inner>>,
-    dir: ScratchDirectoryType,
+    dir: ScratchDirectoryType
 }
 
 impl ScratchDirectory {
@@ -63,10 +60,10 @@ impl ScratchDirectory {
     pub fn new_in_path(path: PathBuf) -> ScratchDirectory {
         let inner = Inner {
             _parent: None,
-            dir: ScratchDirectoryType::Path(path),
+            dir: ScratchDirectoryType::Path(path)
         };
         ScratchDirectory {
-            inner: Arc::new(inner),
+            inner: Arc::new(inner)
         }
     }
 
@@ -76,17 +73,17 @@ impl ScratchDirectory {
         let temp_dir = tempfile::tempdir()?;
         let inner = Inner {
             _parent: None,
-            dir: ScratchDirectoryType::TempDir(temp_dir),
+            dir: ScratchDirectoryType::TempDir(temp_dir)
         };
         Ok(ScratchDirectory {
-            inner: Arc::new(inner),
+            inner: Arc::new(inner)
         })
     }
 
     pub fn path(&self) -> &Path {
         match &self.inner.dir {
             ScratchDirectoryType::Path(path) => path,
-            ScratchDirectoryType::TempDir(tempdir) => tempdir.path(),
+            ScratchDirectoryType::TempDir(tempdir) => tempdir.path()
         }
     }
 
@@ -98,18 +95,19 @@ impl ScratchDirectory {
         let temp_dir = tempfile::tempdir_in(self.path())?;
         let inner = Inner {
             _parent: Some(self.inner.clone()),
-            dir: ScratchDirectoryType::TempDir(temp_dir),
+            dir: ScratchDirectoryType::TempDir(temp_dir)
         };
         Ok(ScratchDirectory {
-            inner: Arc::new(inner),
+            inner: Arc::new(inner)
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::mem;
+
+    use super::*;
 
     #[test]
     fn test_scratch_directory() -> io::Result<()> {

@@ -1,32 +1,30 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+use std::ops::Range;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use bytes::Bytes;
 use quickwit_common::HOTCACHE_FILENAME;
-use quickwit_storage::Cache;
-use quickwit_storage::SliceCache;
-use std::ops::Range;
-use std::path::Path;
-use std::path::PathBuf;
-use std::sync::Arc;
+use quickwit_storage::{Cache, SliceCache};
 
 const FULL_SLICE: Range<usize> = 0..usize::MAX;
 
@@ -35,7 +33,7 @@ const FULL_SLICE: Range<usize> = 0..usize::MAX;
 const HOTCACHE_CACHE_CAPACITY: usize = 500_000_000;
 
 pub struct QuickwitCache {
-    router: Vec<(&'static str, Arc<dyn Cache>)>,
+    router: Vec<(&'static str, Arc<dyn Cache>)>
 }
 
 impl From<Vec<(&'static str, Arc<dyn Cache>)>> for QuickwitCache {
@@ -49,7 +47,7 @@ impl Default for QuickwitCache {
         let mut quickwit_cache = QuickwitCache::empty();
         quickwit_cache.add_route(
             HOTCACHE_FILENAME,
-            Arc::new(SimpleCache::with_capacity_in_bytes(HOTCACHE_CACHE_CAPACITY)),
+            Arc::new(SimpleCache::with_capacity_in_bytes(HOTCACHE_CACHE_CAPACITY))
         );
         quickwit_cache
     }
@@ -110,13 +108,13 @@ impl Cache for QuickwitCache {
 /// HACK! We use `0..usize::MAX` to signify the "entire file".
 /// TODO fixme
 struct SimpleCache {
-    slice_cache: SliceCache,
+    slice_cache: SliceCache
 }
 
 impl SimpleCache {
     fn with_capacity_in_bytes(capacity_in_bytes: usize) -> Self {
         SimpleCache {
-            slice_cache: SliceCache::with_capacity_in_bytes(capacity_in_bytes),
+            slice_cache: SliceCache::with_capacity_in_bytes(capacity_in_bytes)
         }
     }
 }
@@ -151,10 +149,10 @@ mod tests {
     use std::path::Path;
     use std::sync::Arc;
 
-    use super::QuickwitCache;
     use bytes::Bytes;
-    use quickwit_storage::Cache;
-    use quickwit_storage::MockCache;
+    use quickwit_storage::{Cache, MockCache};
+
+    use super::QuickwitCache;
 
     #[tokio::test]
     async fn test_quickwit_cache_get_all() {

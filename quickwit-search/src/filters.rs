@@ -1,29 +1,27 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::ops::{Bound, RangeBounds};
 
 use tantivy::fastfield::{DynamicFastFieldReader, FastFieldReader};
-use tantivy::schema::Type;
-use tantivy::DocId;
-use tantivy::{schema::Field, SegmentReader, TantivyError};
+use tantivy::schema::{Field, Type};
+use tantivy::{DocId, SegmentReader, TantivyError};
 
 /// A filter that only retains docs within a time range.
 #[derive(Clone)]
@@ -33,7 +31,7 @@ pub struct TimestampFilter {
     /// The time range respresented as (lower_bound, upper_bound).
     time_range: (Bound<i64>, Bound<i64>),
     /// The timestamp fast field reader.
-    timestamp_field_reader: DynamicFastFieldReader<i64>,
+    timestamp_field_reader: DynamicFastFieldReader<i64>
 }
 
 impl TimestampFilter {
@@ -41,7 +39,7 @@ impl TimestampFilter {
         field: Field,
         start_timestamp_opt: Option<i64>,
         end_timestamp_opt: Option<i64>,
-        segment_reader: &SegmentReader,
+        segment_reader: &SegmentReader
     ) -> tantivy::Result<Option<Self>> {
         let field_entry = segment_reader.schema().get_field_entry(field);
 
@@ -59,11 +57,11 @@ impl TimestampFilter {
         let timestamp_field_reader = segment_reader.fast_fields().i64(field)?;
         let segment_range = (
             timestamp_field_reader.min_value(),
-            timestamp_field_reader.max_value(),
+            timestamp_field_reader.max_value()
         );
         let timestamp_range = (
             start_timestamp_opt.unwrap_or(i64::MIN),
-            end_timestamp_opt.unwrap_or(i64::MAX),
+            end_timestamp_opt.unwrap_or(i64::MAX)
         );
         if is_segment_always_within_timestamp_range(segment_range, timestamp_range) {
             return Ok(None);
@@ -79,7 +77,7 @@ impl TimestampFilter {
         Ok(Some(TimestampFilter {
             field,
             time_range: (lower_bound, upper_bound),
-            timestamp_field_reader,
+            timestamp_field_reader
         }))
     }
 
@@ -96,7 +94,7 @@ impl TimestampFilter {
 /// - timestamp_range: is a half open range `[min, max[`.
 fn is_segment_always_within_timestamp_range(
     segment_range: (i64, i64),
-    timestamp_range: (i64, i64),
+    timestamp_range: (i64, i64)
 ) -> bool {
     segment_range.0 >= timestamp_range.0 && segment_range.1 < timestamp_range.1
 }

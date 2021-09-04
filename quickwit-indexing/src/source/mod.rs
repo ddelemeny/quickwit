@@ -1,40 +1,36 @@
-// Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 mod file_source;
 mod source_factory;
 mod vec_source;
 
-use crate::models::IndexerMessage;
-use async_trait::async_trait;
-use once_cell::sync::OnceCell;
-use quickwit_actors::Actor;
-use quickwit_actors::ActorContext;
-use quickwit_actors::ActorExitStatus;
-use quickwit_actors::AsyncActor;
-use quickwit_actors::Mailbox;
 use std::fmt;
 
+use async_trait::async_trait;
 pub use file_source::{FileSource, FileSourceFactory, FileSourceParams};
+use once_cell::sync::OnceCell;
+use quickwit_actors::{Actor, ActorContext, ActorExitStatus, AsyncActor, Mailbox};
 pub use source_factory::{SourceFactory, SourceLoader, TypedSourceFactory};
 pub use vec_source::{VecSource, VecSourceFactory, VecSourceParams};
+
+use crate::models::IndexerMessage;
 
 pub type SourceContext = ActorContext<Loop>;
 
@@ -51,9 +47,9 @@ pub type SourceContext = ActorContext<Loop>;
 /// ```ignore
 /// source.initialize(ctx)?
 /// let exit_status = loop {
-///    if let Err(exit_status) = source.emit_batches()? {
-///       break exit_status;
-////   }
+///   if let Err(exit_status) = source.emit_batches()? {
+///      break exit_status;
+////  }
 /// };
 /// source.finalize(exit_status)?;
 /// ```
@@ -69,14 +65,14 @@ pub trait Source: Send + Sync + 'static {
     async fn emit_batches(
         &mut self,
         batch_sink: &Mailbox<IndexerMessage>,
-        ctx: &SourceContext,
+        ctx: &SourceContext
     ) -> Result<(), ActorExitStatus>;
 
     /// Finalize is called once after the actor terminates.
     async fn finalize(
         &mut self,
         _exit_status: &ActorExitStatus,
-        _ctx: &SourceContext,
+        _ctx: &SourceContext
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -94,7 +90,7 @@ pub trait Source: Send + Sync + 'static {
 /// It mostly takes care of running a loop calling `emit_batches(...)`.
 pub struct SourceActor {
     pub source: Box<dyn Source>,
-    pub batch_sink: Mailbox<IndexerMessage>,
+    pub batch_sink: Mailbox<IndexerMessage>
 }
 
 /// The goal of this struct is simply to prevent the construction of a Loop object.
@@ -122,7 +118,7 @@ impl Actor for SourceActor {
 impl AsyncActor for SourceActor {
     async fn initialize(
         &mut self,
-        ctx: &ActorContext<Self::Message>,
+        ctx: &ActorContext<Self::Message>
     ) -> Result<(), ActorExitStatus> {
         self.source.initialize(ctx).await?;
         self.process_message(Loop(PrivateToken), ctx).await?;
@@ -132,7 +128,7 @@ impl AsyncActor for SourceActor {
     async fn process_message(
         &mut self,
         _message: Loop,
-        ctx: &ActorContext<Self::Message>,
+        ctx: &ActorContext<Self::Message>
     ) -> Result<(), ActorExitStatus> {
         self.source.emit_batches(&self.batch_sink, ctx).await?;
         ctx.send_self_message(Loop(PrivateToken)).await?;
@@ -142,7 +138,7 @@ impl AsyncActor for SourceActor {
     async fn finalize(
         &mut self,
         exit_status: &ActorExitStatus,
-        ctx: &ActorContext<Self::Message>,
+        ctx: &ActorContext<Self::Message>
     ) -> anyhow::Result<()> {
         self.source.finalize(exit_status, ctx).await?;
         Ok(())
@@ -163,5 +159,5 @@ pub fn quickwit_supported_sources() -> &'static SourceLoader {
 pub struct SourceConfig {
     pub id: String,
     pub source_type: String,
-    pub params: serde_json::Value,
+    pub params: serde_json::Value
 }

@@ -1,36 +1,31 @@
-//  Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use std::any::Any;
 use std::fmt;
+use std::hash::Hash;
 use std::sync::Arc;
 
-use std::hash::Hash;
 use tokio::sync::oneshot;
 
-use crate::channel_with_priority::Priority;
-use crate::channel_with_priority::Receiver;
-use crate::channel_with_priority::Sender;
-use crate::QueueCapacity;
-use crate::RecvError;
-use crate::SendError;
+use crate::channel_with_priority::{Priority, Receiver, Sender};
+use crate::{QueueCapacity, RecvError, SendError};
 
 /// A mailbox is the object that makes it possible to send a message
 /// to an actor.
@@ -49,13 +44,13 @@ use crate::SendError;
 /// If all mailboxes are dropped, the actor will process all of the pending messages
 /// and gracefully exit with `ActorExitStatus::Success`.
 pub struct Mailbox<Message> {
-    pub(crate) inner: Arc<Inner<Message>>,
+    pub(crate) inner: Arc<Inner<Message>>
 }
 
 impl<Message> Clone for Mailbox<Message> {
     fn clone(&self) -> Self {
         Mailbox {
-            inner: self.inner.clone(),
+            inner: self.inner.clone()
         }
     }
 }
@@ -68,7 +63,7 @@ impl<Message> Mailbox<Message> {
 
 pub(crate) enum CommandOrMessage<Message> {
     Message(Message),
-    Command(Command),
+    Command(Command)
 }
 
 impl<Message> From<Command> for CommandOrMessage<Message> {
@@ -79,7 +74,7 @@ impl<Message> From<Command> for CommandOrMessage<Message> {
 
 pub(crate) struct Inner<Message> {
     pub(crate) tx: Sender<CommandOrMessage<Message>>,
-    instance_id: String,
+    instance_id: String
 }
 
 /// Commands are messages that can be send to control the behavior of an actor.
@@ -136,7 +131,7 @@ pub(crate) enum Command {
     /// may have different behavior depending on the exit state.
     ///
     /// This is the equivalent of sending SIGKILL to a process.
-    Kill,
+    Kill
 }
 
 impl fmt::Debug for Command {
@@ -146,7 +141,7 @@ impl fmt::Debug for Command {
             Command::Resume => write!(f, "Resume"),
             Command::Observe(_) => write!(f, "Observe"),
             Command::Quit => write!(f, "Quit"),
-            Command::Kill => todo!(),
+            Command::Kill => todo!()
         }
     }
 }
@@ -179,7 +174,7 @@ impl<Message> Mailbox<Message> {
     pub(crate) async fn send_with_priority(
         &self,
         cmd_or_msg: CommandOrMessage<Message>,
-        priority: Priority,
+        priority: Priority
     ) -> Result<(), SendError> {
         self.inner.tx.send(cmd_or_msg, priority).await
     }
@@ -187,7 +182,7 @@ impl<Message> Mailbox<Message> {
     pub(crate) fn send_with_priority_blocking(
         &self,
         cmd_or_msg: CommandOrMessage<Message>,
-        priority: Priority,
+        priority: Priority
     ) -> Result<(), SendError> {
         self.inner.tx.send_blocking(cmd_or_msg, priority)
     }
@@ -219,7 +214,7 @@ impl<Message> Mailbox<Message> {
 }
 
 pub struct Inbox<Message> {
-    rx: Receiver<CommandOrMessage<Message>>,
+    rx: Receiver<CommandOrMessage<Message>>
 }
 
 impl<Message: fmt::Debug> Inbox<Message> {
@@ -228,7 +223,7 @@ impl<Message: fmt::Debug> Inbox<Message> {
     }
 
     pub(crate) async fn recv_timeout_cmd_and_scheduled_msg_only(
-        &mut self,
+        &mut self
     ) -> Result<CommandOrMessage<Message>, RecvError> {
         self.rx
             .recv_high_priority_timeout(crate::message_timeout())
@@ -240,7 +235,7 @@ impl<Message: fmt::Debug> Inbox<Message> {
     }
 
     pub(crate) fn recv_timeout_cmd_and_scheduled_msg_only_blocking(
-        &mut self,
+        &mut self
     ) -> Result<CommandOrMessage<Message>, RecvError> {
         self.rx
             .recv_high_priority_timeout_blocking(crate::message_timeout())
@@ -257,7 +252,7 @@ impl<Message: fmt::Debug> Inbox<Message> {
             .into_iter()
             .flat_map(|command_or_message| match command_or_message {
                 CommandOrMessage::Message(msg) => Some(msg),
-                CommandOrMessage::Command(_) => None,
+                CommandOrMessage::Command(_) => None
             })
             .collect()
     }
@@ -265,14 +260,14 @@ impl<Message: fmt::Debug> Inbox<Message> {
 
 pub fn create_mailbox<M>(
     actor_name: String,
-    queue_capacity: QueueCapacity,
+    queue_capacity: QueueCapacity
 ) -> (Mailbox<M>, Inbox<M>) {
     let (tx, rx) = crate::channel_with_priority::channel(queue_capacity);
     let mailbox = Mailbox {
         inner: Arc::new(Inner {
             tx,
-            instance_id: quickwit_common::new_coolid(&actor_name),
-        }),
+            instance_id: quickwit_common::new_coolid(&actor_name)
+        })
     };
     let inbox = Inbox { rx };
     (mailbox, inbox)

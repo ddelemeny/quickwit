@@ -1,42 +1,40 @@
-//  Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
+use std::any::type_name;
 use std::fmt;
 use std::ops::Deref;
+use std::sync::Arc;
 use std::time::Duration;
-use std::{any::type_name, sync::Arc};
+
 use thiserror::Error;
 use tokio::sync::watch::Sender;
 use tracing::{debug, error};
 
+use crate::actor_state::{ActorState, AtomicState};
 use crate::async_actor::spawn_async_actor;
 use crate::channel_with_priority::Priority;
 use crate::mailbox::{Command, CommandOrMessage};
+use crate::progress::{Progress, ProtectedZoneGuard};
 use crate::scheduler::{Callback, SchedulerMessage};
 use crate::sync_actor::spawn_sync_actor;
-use crate::{
-    actor_state::{ActorState, AtomicState},
-    progress::{Progress, ProtectedZoneGuard},
-    KillSwitch, Mailbox, QueueCapacity, SendError,
-};
-use crate::{ActorHandle, AsyncActor, SyncActor};
+use crate::{ActorHandle, AsyncActor, KillSwitch, Mailbox, QueueCapacity, SendError, SyncActor};
 
 /// The actor exit status represents the outcome of the execution of an actor,
 /// after the end of the execution.
@@ -60,7 +58,8 @@ pub enum ActorExitStatus {
 
     /// The actor was asked to gracefully shutdown.
     ///
-    /// (Semantically equivalent to exit status code 130, triggered by SIGINT aka Ctrl-C, or SIGQUIT)
+    /// (Semantically equivalent to exit status code 130, triggered by SIGINT aka Ctrl-C, or
+    /// SIGQUIT)
     #[error("Quit")]
     Quit,
 
@@ -87,7 +86,7 @@ pub enum ActorExitStatus {
 
     /// The thread or the task executing the actor loop panicked.
     #[error("Panicked")]
-    Panicked,
+    Panicked
 }
 
 impl From<anyhow::Error> for ActorExitStatus {
@@ -142,13 +141,13 @@ pub trait Actor: Send + Sync + 'static {
 
 // TODO hide all of this public stuff
 pub struct ActorContext<Message> {
-    inner: Arc<ActorContextInner<Message>>,
+    inner: Arc<ActorContextInner<Message>>
 }
 
 impl<Message> Clone for ActorContext<Message> {
     fn clone(&self) -> Self {
         ActorContext {
-            inner: self.inner.clone(),
+            inner: self.inner.clone()
         }
     }
 }
@@ -166,14 +165,14 @@ pub struct ActorContextInner<Message> {
     progress: Progress,
     kill_switch: KillSwitch,
     scheduler_mailbox: Mailbox<SchedulerMessage>,
-    actor_state: AtomicState,
+    actor_state: AtomicState
 }
 
 impl<Message> ActorContext<Message> {
     pub(crate) fn new(
         self_mailbox: Mailbox<Message>,
         kill_switch: KillSwitch,
-        scheduler_mailbox: Mailbox<SchedulerMessage>,
+        scheduler_mailbox: Mailbox<SchedulerMessage>
     ) -> Self {
         ActorContext {
             inner: ActorContextInner {
@@ -181,9 +180,9 @@ impl<Message> ActorContext<Message> {
                 progress: Progress::default(),
                 kill_switch,
                 scheduler_mailbox,
-                actor_state: AtomicState::default(),
+                actor_state: AtomicState::default()
             }
-            .into(),
+            .into()
         }
     }
 
@@ -222,7 +221,7 @@ impl<Message> ActorContext<Message> {
     pub fn spawn_async<A: AsyncActor>(
         &self,
         actor: A,
-        kill_switch: KillSwitch,
+        kill_switch: KillSwitch
     ) -> (Mailbox<A::Message>, ActorHandle<A>) {
         spawn_async_actor(actor, kill_switch, self.scheduler_mailbox.clone())
     }
@@ -230,7 +229,7 @@ impl<Message> ActorContext<Message> {
     pub fn spawn_sync<A: SyncActor>(
         &self,
         actor: A,
-        kill_switch: KillSwitch,
+        kill_switch: KillSwitch
     ) -> (Mailbox<A::Message>, ActorHandle<A>) {
         spawn_sync_actor(actor, kill_switch, self.scheduler_mailbox.clone())
     }
@@ -275,7 +274,7 @@ fn should_activate_kill_switch(exit_status: &ActorExitStatus) -> bool {
         ActorExitStatus::Panicked => true,
         ActorExitStatus::Success => false,
         ActorExitStatus::Quit => false,
-        ActorExitStatus::Killed => false,
+        ActorExitStatus::Killed => false
     }
 }
 
@@ -288,7 +287,7 @@ impl<Message: Send + Sync + fmt::Debug + 'static> ActorContext<Message> {
     pub fn send_message_blocking<M: fmt::Debug>(
         &self,
         mailbox: &Mailbox<M>,
-        msg: M,
+        msg: M
     ) -> Result<(), crate::SendError> {
         let _guard = self.protect_zone();
         debug!(from=%self.self_mailbox.actor_instance_id(), to=%mailbox.actor_instance_id(), msg=?msg, "send");
@@ -320,7 +319,7 @@ impl<Message: Send + Sync + fmt::Debug + 'static> ActorContext<Message> {
                 let _ = self_mailbox
                     .send_with_priority(CommandOrMessage::Message(msg), Priority::High)
                     .await;
-            })),
+            }))
         };
         let _ = self.send_message_blocking(&self.inner.scheduler_mailbox, scheduler_msg);
     }
@@ -331,7 +330,7 @@ impl<Message: Send + Sync + fmt::Debug + 'static> ActorContext<Message> {
     pub async fn send_message<M: fmt::Debug>(
         &self,
         mailbox: &Mailbox<M>,
-        msg: M,
+        msg: M
     ) -> Result<(), crate::SendError> {
         let _guard = self.protect_zone();
         debug!(from=%self.self_mailbox.actor_instance_id(), send=%mailbox.actor_instance_id(), msg=?msg);
@@ -353,7 +352,7 @@ impl<Message: Send + Sync + fmt::Debug + 'static> ActorContext<Message> {
         }));
         let scheduler_msg = SchedulerMessage::ScheduleEvent {
             timeout: after_duration,
-            callback,
+            callback
         };
         let _ = self
             .send_message(&self.inner.scheduler_mailbox, scheduler_msg)
@@ -365,7 +364,7 @@ pub(crate) fn process_command<A: Actor>(
     actor: &mut A,
     command: Command,
     ctx: &mut ActorContext<A::Message>,
-    state_tx: &Sender<A::ObservableState>,
+    state_tx: &Sender<A::ObservableState>
 ) -> Option<ActorExitStatus> {
     match command {
         Command::Pause => {

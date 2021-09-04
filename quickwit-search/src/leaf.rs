@@ -1,25 +1,27 @@
-//  Quickwit
-//  Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
 //
-//  Quickwit is offered under the AGPL v3.0 and as commercial software.
-//  For commercial licensing, contact us at hello@quickwit.io.
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
 //
-//  AGPL:
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 //
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
 //
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::collector::{make_collector_for_split, make_merge_collector, GenericQuickwitCollector};
-use crate::SearchError;
+use std::collections::{BTreeMap, HashSet};
+use std::convert::TryInto;
+use std::path::PathBuf;
+use std::sync::Arc;
+
 use anyhow::Context;
 use bytes::Bytes;
 use futures::future::try_join_all;
@@ -29,13 +31,13 @@ use quickwit_directories::{CachingDirectory, HotDirectory, StorageDirectory};
 use quickwit_index_config::IndexConfig;
 use quickwit_proto::{LeafSearchResult, SearchRequest, SplitIdAndFooterOffsets, SplitSearchError};
 use quickwit_storage::{BundleStorage, MemorySizedCache, Storage};
-use std::collections::{BTreeMap, HashSet};
-use std::convert::TryInto;
-use std::path::PathBuf;
-
-use std::sync::Arc;
-use tantivy::{collector::Collector, query::Query, Index, ReloadPolicy, Searcher, Term};
+use tantivy::collector::Collector;
+use tantivy::query::Query;
+use tantivy::{Index, ReloadPolicy, Searcher, Term};
 use tokio::task::spawn_blocking;
+
+use crate::collector::{make_collector_for_split, make_merge_collector, GenericQuickwitCollector};
+use crate::SearchError;
 
 fn global_split_footer_cache() -> &'static MemorySizedCache<String> {
     static INSTANCE: OnceCell<MemorySizedCache<String>> = OnceCell::new();
@@ -44,7 +46,7 @@ fn global_split_footer_cache() -> &'static MemorySizedCache<String> {
 
 async fn get_split_footer_from_cache_or_fetch(
     index_storage: Arc<dyn Storage>,
-    split_and_footer_offsets: &SplitIdAndFooterOffsets,
+    split_and_footer_offsets: &SplitIdAndFooterOffsets
 ) -> anyhow::Result<Bytes> {
     {
         let possible_val = global_split_footer_cache().get(&split_and_footer_offsets.split_id);
@@ -57,7 +59,7 @@ async fn get_split_footer_from_cache_or_fetch(
         .get_slice(
             &split_file,
             split_and_footer_offsets.split_footer_start as usize
-                ..split_and_footer_offsets.split_footer_end as usize,
+                ..split_and_footer_offsets.split_footer_end as usize
         )
         .await
         .with_context(|| {
@@ -70,7 +72,7 @@ async fn get_split_footer_from_cache_or_fetch(
 
     global_split_footer_cache().put(
         split_and_footer_offsets.split_id.to_owned(),
-        footer_data_opt.clone(),
+        footer_data_opt.clone()
     );
 
     Ok(footer_data_opt)
@@ -81,7 +83,7 @@ async fn get_split_footer_from_cache_or_fetch(
 /// The resulting index uses a dynamic and a static cache.
 pub(crate) async fn open_index(
     index_storage: Arc<dyn Storage>,
-    split_and_footer_offsets: &SplitIdAndFooterOffsets,
+    split_and_footer_offsets: &SplitIdAndFooterOffsets
 ) -> anyhow::Result<Index> {
     let split_file = PathBuf::from(format!("{}.split", split_and_footer_offsets.split_id));
     let mut footer_data =
@@ -112,7 +114,7 @@ pub(crate) async fn open_index(
 pub(crate) async fn warmup(
     searcher: &Searcher,
     query: &dyn Query,
-    fast_field_names: &HashSet<String>,
+    fast_field_names: &HashSet<String>
 ) -> anyhow::Result<()> {
     warm_up_terms(searcher, query).await?;
     warm_up_fastfields(searcher, fast_field_names).await?;
@@ -121,7 +123,7 @@ pub(crate) async fn warmup(
 
 async fn warm_up_fastfields(
     searcher: &Searcher,
-    fast_field_names: &HashSet<String>,
+    fast_field_names: &HashSet<String>
 ) -> anyhow::Result<()> {
     let mut fast_fields = Vec::new();
     for fast_field_name in fast_field_names.iter() {
@@ -180,7 +182,7 @@ async fn leaf_search_single_split(
     search_request: &SearchRequest,
     storage: Arc<dyn Storage>,
     split: SplitIdAndFooterOffsets,
-    index_config: Arc<dyn IndexConfig>,
+    index_config: Arc<dyn IndexConfig>
 ) -> crate::Result<LeafSearchResult> {
     let split_id = split.split_id.to_string();
     let index = open_index(storage, &split).await?;
@@ -189,7 +191,7 @@ async fn leaf_search_single_split(
         split_id,
         index_config.as_ref(),
         search_request,
-        &split_schema,
+        &split_schema
     );
     let query = index_config.query(split_schema, search_request)?;
 
@@ -213,7 +215,7 @@ pub async fn leaf_search(
     request: &SearchRequest,
     index_storage: Arc<dyn Storage>,
     splits: &[SplitIdAndFooterOffsets],
-    index_config: Arc<dyn IndexConfig>,
+    index_config: Arc<dyn IndexConfig>
 ) -> Result<LeafSearchResult, SearchError> {
     let leaf_search_single_split_futures: Vec<_> = splits
         .iter()
@@ -225,7 +227,7 @@ pub async fn leaf_search(
                     request,
                     index_storage_clone,
                     split.clone(),
-                    index_config_clone,
+                    index_config_clone
                 )
                 .await
                 .map_err(|err| (split.split_id.clone(), err))
@@ -239,7 +241,7 @@ pub async fn leaf_search(
             .into_iter()
             .partition_map(|split_search_res| match split_search_res {
                 Ok(search_res) => Either::Left(search_res),
-                Err(err) => Either::Right(err),
+                Err(err) => Either::Right(err)
             });
 
     let merge_collector = make_merge_collector(request);
@@ -253,7 +255,7 @@ pub async fn leaf_search(
         .extend(errors.iter().map(|(split_id, err)| SplitSearchError {
             split_id: split_id.to_string(),
             error: format!("{:?}", err),
-            retryable_error: true,
+            retryable_error: true
         }));
     Ok(merged_search_results)
 }

@@ -1,40 +1,38 @@
-/*
-    Quickwit
-    Copyright (C) 2021 Quickwit Inc.
+// Copyright (C) 2021 Quickwit, Inc.
+//
+// Quickwit is offered under the AGPL v3.0 and as commercial software.
+// For commercial licensing, contact us at hello@quickwit.io.
+//
+// AGPL:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-    Quickwit is offered under the AGPL v3.0 and as commercial software.
-    For commercial licensing, contact us at hello@quickwit.io.
-
-    AGPL:
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
-use crate::StorageDirectory;
-use async_trait::async_trait;
-use bytes::Bytes;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::{fmt, io, mem};
+
+use async_trait::async_trait;
+use bytes::Bytes;
 use tantivy::chrono::{DateTime, Utc};
 use tantivy::directory::error::{DeleteError, LockError, OpenReadError, OpenWriteError};
 use tantivy::directory::{
-    DirectoryLock, FileHandle, OwnedBytes, WatchCallback, WatchHandle, WritePtr,
+    DirectoryLock, FileHandle, OwnedBytes, WatchCallback, WatchHandle, WritePtr
 };
-use tantivy::Directory;
-use tantivy::HasLen;
+use tantivy::{Directory, HasLen};
+
+use crate::StorageDirectory;
 
 #[derive(Clone, Default)]
 struct OperationBuffer(Arc<Mutex<Vec<ReadOperation>>>);
@@ -71,14 +69,14 @@ pub struct ReadOperation {
     /// The date at which the operation was performed.
     pub start_date: DateTime<Utc>,
     /// The elapsed time to run the read operatioon.
-    pub duration: Duration,
+    pub duration: Duration
 }
 
 struct ReadOperationBuilder {
     start_date: DateTime<Utc>,
     start_instant: Instant,
     path: PathBuf,
-    offset: usize,
+    offset: usize
 }
 
 impl ReadOperationBuilder {
@@ -89,7 +87,7 @@ impl ReadOperationBuilder {
             start_date,
             start_instant,
             path: path.to_path_buf(),
-            offset: 0,
+            offset: 0
         }
     }
 
@@ -98,7 +96,7 @@ impl ReadOperationBuilder {
             start_date: self.start_date,
             start_instant: self.start_instant,
             path: self.path,
-            offset,
+            offset
         }
     }
 
@@ -109,7 +107,7 @@ impl ReadOperationBuilder {
             offset: self.offset,
             num_bytes,
             start_date: self.start_date,
-            duration,
+            duration
         }
     }
 }
@@ -124,14 +122,14 @@ impl ReadOperationBuilder {
 #[derive(Debug)]
 pub struct DebugProxyDirectory<D: Directory> {
     underlying: Arc<D>,
-    operations: OperationBuffer,
+    operations: OperationBuffer
 }
 
 impl<D: Directory> Clone for DebugProxyDirectory<D> {
     fn clone(&self) -> Self {
         DebugProxyDirectory {
             underlying: self.underlying.clone(),
-            operations: self.operations.clone(),
+            operations: self.operations.clone()
         }
     }
 }
@@ -141,7 +139,7 @@ impl<D: Directory> DebugProxyDirectory<D> {
     pub fn wrap(directory: D) -> Self {
         DebugProxyDirectory {
             underlying: Arc::new(directory),
-            operations: OperationBuffer::default(),
+            operations: OperationBuffer::default()
         }
     }
 
@@ -166,7 +164,7 @@ impl<D: Directory> DebugProxyDirectory<D> {
 struct DebugProxyFileHandle<D: Directory> {
     directory: DebugProxyDirectory<D>,
     underlying: Box<dyn FileHandle>,
-    path: PathBuf,
+    path: PathBuf
 }
 
 #[async_trait]
@@ -182,7 +180,7 @@ impl<D: Directory> FileHandle for DebugProxyFileHandle<D> {
 
     async fn read_bytes_async(
         &self,
-        byte_range: Range<usize>,
+        byte_range: Range<usize>
     ) -> tantivy::AsyncIoResult<OwnedBytes> {
         let read_operation_builder =
             ReadOperationBuilder::new(&self.path).with_offset(byte_range.start);
@@ -211,7 +209,7 @@ impl<D: Directory> Directory for DebugProxyDirectory<D> {
         Ok(Box::new(DebugProxyFileHandle {
             underlying,
             directory: self.clone(),
-            path: path.to_owned(),
+            path: path.to_owned()
         }))
     }
 
@@ -270,11 +268,13 @@ impl DebugProxyDirectory<StorageDirectory> {
 
 #[cfg(test)]
 mod tests {
-    use super::DebugProxyDirectory;
     use std::io::Write;
     use std::path::Path;
+
     use tantivy::directory::{RamDirectory, TerminatingWrite};
     use tantivy::Directory;
+
+    use super::DebugProxyDirectory;
 
     const TEST_PATH: &str = "test.file";
     const TEST_PAYLOAD: &[u8] = b"hello happy tax payer";
