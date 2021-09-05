@@ -237,7 +237,7 @@ impl StableMultitenantWithTimestampMergePolicy {
     fn case_levels_given_growth_factor(&self, growth_factor: usize) -> Vec<usize> {
         assert!(self.min_level_num_docs > 0);
         assert!(self.merge_factor > 1);
-        assert!(self.merge_factor_max >= self.merge_factor_max);
+        assert!(self.merge_factor_max >= self.merge_factor);
         assert!(self.max_merge_docs > self.min_level_num_docs);
         let mut levels_start_num_docs = vec![1];
         let mut level_end_doc = self.min_level_num_docs;
