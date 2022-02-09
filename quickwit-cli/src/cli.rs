@@ -18,7 +18,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use anyhow::bail;
-use clap::ArgMatches;
+use clap::{Subcommand, ArgMatches};
 use tracing::Level;
 
 use crate::index::IndexCliCommand;
@@ -26,11 +26,20 @@ use crate::service::ServiceCliCommand;
 use crate::source::SourceCliCommand;
 use crate::split::SplitCliCommand;
 
-#[derive(Debug, PartialEq)]
+#[derive(Subcommand, Debug, PartialEq)]
 pub enum CliCommand {
+    #[clap(subcommand)]
+    /// Create your index, ingest data, search, describe... every command you need
+    /// to manage indexes.
     Index(IndexCliCommand),
+    #[clap(subcommand)]
+    /// Launches services.
     Service(ServiceCliCommand),
+    #[clap(subcommand)]
+    /// Manages sources.
     Source(SourceCliCommand),
+    #[clap(subcommand)]
+    /// Operations (list, add, delete, describe...) on splits.
     Split(SplitCliCommand),
 }
 

@@ -18,7 +18,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use anyhow::{bail, Context};
-use clap::ArgMatches;
+use clap::{Subcommand, Args, ArgMatches};
 use itertools::Itertools;
 use quickwit_common::uri::Uri;
 use quickwit_config::{SourceConfig, SourceParams};
@@ -31,41 +31,92 @@ use tabled::{Table, Tabled};
 
 use crate::{load_quickwit_config, make_table};
 
-#[derive(Debug, PartialEq)]
+#[derive(Args, Debug, PartialEq)]
 pub struct AddSourceArgs {
+    #[clap(required=true)]
+    /// Quickwit config file.
+    #[clap(name="config", value_name="CONFIG", env="QW_CONFIG", long)]
+    #[clap(parse(try_from_str=Uri::try_new))]
     pub config_uri: Uri,
+    #[clap(required=true)]
+    #[clap(name="index", value_name="INDEX", long)]
+    /// Id of the target index
     pub index_id: String,
+    #[clap(required=true)]
+    #[clap(name="source", value_name="SOURCE ID", long)]
+    /// Id of the target source
     pub source_id: String,
+    #[clap(required=true)]
+    #[clap(name="type", value_name="SOURCE TYPE", long)]
+    /// Type of the source. Available types are: 'file' and 'kafka'.
     pub source_type: String,
-    /// Can be an inline JSON object or a path to a file holding a JSON object.
+    #[clap(required=true, long)]
+    /// Parameters for the source formatted as a JSON object passed inline or via a file.
+    ///
+    /// Parameters are source-specific.  Please, refer to the source's documentation for more details.
     pub params: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Args, Debug, PartialEq)]
 pub struct DeleteSourceArgs {
+    #[clap(required=true)]
+    /// Quickwit config file.
+    #[clap(name="config", value_name="CONFIG", env="QW_CONFIG", long)]
+    #[clap(parse(try_from_str=Uri::try_new))]
     pub config_uri: Uri,
+    #[clap(required=true)]
+    #[clap(name="index", value_name="INDEX", long)]
+    /// Id of the target index
     pub index_id: String,
+    #[clap(required=true)]
+    #[clap(name="source", value_name="SOURCE", long)]
+    /// Id of the target source
     pub source_id: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Args, Debug, PartialEq)]
 pub struct DescribeSourceArgs {
+    #[clap(required=true)]
+    #[clap(name="config", value_name="CONFIG", env="QW_CONFIG", long)]
+    #[clap(parse(try_from_str=Uri::try_new))]
+    /// Quickwit config file.
     pub config_uri: Uri,
+    #[clap(required=true)]
+    #[clap(name="index", value_name="INDEX", long)]
+    /// Id of the target index
     pub index_id: String,
+    #[clap(required=true)]
+    #[clap(name="source", value_name="SOURCE", long)]
+    /// Id of the target source
     pub source_id: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Args, Debug, PartialEq)]
 pub struct ListSourcesArgs {
+    #[clap(required=true)]
+    #[clap(name="config", value_name="CONFIG", env="QW_CONFIG", long)]
+    #[clap(parse(try_from_str=Uri::try_new))]
+    /// Quickwit config file.
     pub config_uri: Uri,
+    #[clap(required=true)]
+    #[clap(name="index", value_name="INDEX", long)]
+    /// Id of the target index
     pub index_id: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Subcommand, Debug, PartialEq)]
 pub enum SourceCliCommand {
+    #[clap(name="add")]
+    /// Adds a new source.
     AddSource(AddSourceArgs),
+    #[clap(name="delete")]
+    /// Deletes a source.
     DeleteSource(DeleteSourceArgs),
+    #[clap(name="describe")]
+    /// Describes a source.
     DescribeSource(DescribeSourceArgs),
+    #[clap(name="list")]
+    /// Lists the sources of an index.
     ListSources(ListSourcesArgs),
 }
 

@@ -25,7 +25,7 @@ use std::{env, fmt, io};
 
 use anyhow::{bail, Context};
 use chrono::Utc;
-use clap::ArgMatches;
+use clap::{Subcommand, Args, ArgMatches};
 use colored::Colorize;
 use itertools::Itertools;
 use quickwit_actors::{ActorHandle, ObservationType};
@@ -49,68 +49,101 @@ use crate::{
     load_quickwit_config, parse_duration_with_unit, run_index_checklist, THROUGHPUT_WINDOW_SIZE,
 };
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Args, Debug, Eq, PartialEq)]
 pub struct DescribeIndexArgs {
+    #[clap(required=true, long, parse(try_from_str=Uri::try_new))]
     pub config_uri: Uri,
+    #[clap(long)]
     pub data_dir: Option<PathBuf>,
+    #[clap(required=true, long)]
     pub index_id: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Args, Debug, PartialEq)]
 pub struct CreateIndexArgs {
+    #[clap(required=true, long, parse(try_from_str=Uri::try_new))]
     pub index_config_uri: Uri,
+    #[clap(required=true, long, parse(try_from_str=Uri::try_new))]
     pub config_uri: Uri,
+    #[clap(long)]
     pub data_dir: Option<PathBuf>,
+    #[clap(long)]
     pub overwrite: bool,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Args, Debug, PartialEq, Eq)]
 pub struct IngestDocsArgs {
+    #[clap(required=true, long)]
     pub index_id: String,
+    #[clap(long)]
     pub input_path_opt: Option<PathBuf>,
+    #[clap(required=true, long, parse(try_from_str=Uri::try_new))]
     pub config_uri: Uri,
+    #[clap(long)]
     pub data_dir: Option<PathBuf>,
+    #[clap(long)]
     pub overwrite: bool,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Args, Debug, PartialEq, Eq)]
 pub struct SearchIndexArgs {
+    #[clap(required=true, long)]
     pub index_id: String,
+    #[clap(required=true, long)]
     pub query: String,
+    #[clap(long, default_value="20")]
     pub max_hits: usize,
+    #[clap(long, default_value="0")]
     pub start_offset: usize,
+    #[clap(long)]
     pub search_fields: Option<Vec<String>>,
+    #[clap(long)]
     pub start_timestamp: Option<i64>,
+    #[clap(long)]
     pub end_timestamp: Option<i64>,
+    #[clap(required=true, long, parse(try_from_str=Uri::try_new))]
     pub config_uri: Uri,
+    #[clap(long)]
     pub data_dir: Option<PathBuf>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Args, Debug, PartialEq, Eq)]
 pub struct DeleteIndexArgs {
+    #[clap(required=true, long)]
     pub index_id: String,
+    #[clap(long)]
     pub dry_run: bool,
+    #[clap(required=true, long, parse(try_from_str=Uri::try_new))]
     pub config_uri: Uri,
+    #[clap(long)]
     pub data_dir: Option<PathBuf>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Args, Debug, PartialEq, Eq)]
 pub struct GarbageCollectIndexArgs {
+    #[clap(required=true, long)]
     pub index_id: String,
+    #[clap(long, parse(try_from_str=parse_duration_with_unit))]
     pub grace_period: Duration,
+    #[clap(long)]
     pub dry_run: bool,
+    #[clap(required=true, long, parse(try_from_str=Uri::try_new))]
     pub config_uri: Uri,
+    #[clap(long)]
     pub data_dir: Option<PathBuf>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Args, Debug, PartialEq, Eq)]
 pub struct MergeOrDemuxArgs {
+    #[clap(required=true, long)]
     pub index_id: String,
+    #[clap(required=true, long, parse(try_from_str=Uri::try_new))]
     pub config_uri: Uri,
+    #[clap(long)]
     pub data_dir: Option<PathBuf>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Subcommand, Debug, PartialEq)]
 pub enum IndexCliCommand {
     Create(CreateIndexArgs),
     Describe(DescribeIndexArgs),

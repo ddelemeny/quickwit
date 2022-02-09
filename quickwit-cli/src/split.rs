@@ -23,7 +23,7 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context};
 use chrono::{NaiveDate, NaiveDateTime};
-use clap::ArgMatches;
+use clap::{Subcommand, Args, ArgMatches};
 use humansize::{file_size_opts, FileSize};
 use itertools::Itertools;
 use quickwit_common::uri::Uri;
@@ -37,36 +37,93 @@ use tracing::debug;
 
 use crate::{load_quickwit_config, make_table};
 
-#[derive(Debug, Eq, PartialEq)]
+// FIXME: coding style ? where to put it ?
+fn parse_tags_into_btreeset(tags:&str) -> BTreeSet<String> {
+    let values: Option<Vec<&str>> = Some(tags.split(',').collect());
+
+    values.map_or(BTreeSet::default(), |values| {
+        values
+            .into_iter()
+            .map(str::to_string)
+            .collect::<BTreeSet<_>>()
+    })
+}
+
+#[derive(Args, Debug, Eq, PartialEq)]
 pub struct ListSplitArgs {
+    #[clap(required=true)]
+    /// Quickwit config file.
+    #[clap(name="config", value_name="CONFIG", env="QW_CONFIG", long)]
+    #[clap(parse(try_from_str=Uri::try_new))]
     pub config_uri: Uri,
+    #[clap(env="QW_DATA_DIR", long)]
+    /// Where data is persisted. Override data-dir defined in config file, default is `./qwdata`.
     pub data_dir: Option<PathBuf>,
+    #[clap(required=true)]
+    #[clap(name="index", value_name="INDEX", long)]
+    /// Id of the target index
     pub index_id: String,
+    #[clap(value_name="SPLIT STATES", long, multiple_occurrences=true, use_delimiter=true)]
+    /// Comma-separated list of split states to filter on.
+    /// Possible values are `staged`, `published`, and `marked`.
     pub states: Vec<SplitState>,
+    #[clap(value_name="START TIMESTAMP", long)]
+    /// Filters out splits containing documents from this timestamp onwards (time-series indexes only).
     pub start_date: Option<i64>,
+    #[clap(value_name="END TIMESTAMP", long)]
+    /// Filters out splits containing documents before this timestamp (time-series indexes only).
     pub end_date: Option<i64>,
+    #[clap(long, parse(from_str=parse_tags_into_btreeset), multiple_occurrences=true, use_delimiter=true)]
+    /// Comma-separated list of tags, only splits that contain all of the tags will be returned.
     pub tags: BTreeSet<String>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Args, Debug, Eq, PartialEq)]
 pub struct DescribeSplitArgs {
+    #[clap(required=true)]
+    /// Quickwit config file.
+    #[clap(name="config", value_name="CONFIG", env="QW_CONFIG", long)]
+    #[clap(parse(try_from_str=Uri::try_new))]
     pub config_uri: Uri,
+    #[clap(env="QW_DATA_DIR", long)]
+    /// Where data is persisted. Override data-dir defined in config file, default is `./qwdata`.
     pub data_dir: Option<PathBuf>,
+    #[clap(required=true)]
+    #[clap(name="index", value_name="INDEX", long)]
+    /// Id of the target index
     pub index_id: String,
+    #[clap(required=true)]
+    #[clap(name="split", value_name="SPLIT", long)]
+    /// Id of the target split
     pub split_id: String,
+    #[clap(long)]
     pub verbose: bool,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Args, Debug, Eq, PartialEq)]
 pub struct ExtractSplitArgs {
+    #[clap(required=true)]
+    /// Quickwit config file.
+    #[clap(name="config", value_name="CONFIG", env="QW_CONFIG", long)]
+    #[clap(parse(try_from_str=Uri::try_new))]
     pub config_uri: Uri,
+    #[clap(env="QW_DATA_DIR", long)]
+    /// Where data is persisted. Override data-dir defined in config file, default is `./qwdata`.
     pub data_dir: Option<PathBuf>,
+    #[clap(required=true)]
+    #[clap(name="index", value_name="INDEX", long)]
+    /// Id of the target index
     pub index_id: String,
+    #[clap(required=true)]
+    #[clap(name="split", value_name="SPLIT", long)]
+    /// Id of the target split
     pub split_id: String,
+    #[clap(long)]
+    /// Directory to extract the split to.
     pub target_dir: PathBuf,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Subcommand, Debug, PartialEq)]
 pub enum SplitCliCommand {
     List(ListSplitArgs),
     Describe(DescribeSplitArgs),

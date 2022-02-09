@@ -20,7 +20,7 @@
 use std::path::PathBuf;
 
 use anyhow::bail;
-use clap::ArgMatches;
+use clap::{Subcommand, Args, ArgMatches};
 use quickwit_common::run_checklist;
 use quickwit_common::uri::Uri;
 use quickwit_indexing::actors::IndexingServer;
@@ -32,20 +32,34 @@ use tracing::debug;
 
 use crate::load_quickwit_config;
 
-#[derive(Debug, PartialEq)]
+#[derive(Args,Debug, PartialEq)]
 pub struct RunIndexerArgs {
+    #[clap(required=true)]
+    /// Quickwit config file.
+    #[clap(name="config", value_name="CONFIG", env="QW_CONFIG", long)]
+    #[clap(parse(try_from_str=Uri::try_new))]
     pub config_uri: Uri,
+    #[clap(name="data-dir", value_name="DATA DIR", env="QW_DATA_DIR", long)]
+    /// Where data is persisted. Override data-dir defined in config file, default is `./qwdata`.
     pub data_dir_path: Option<PathBuf>,
+    #[clap(name="indexes", value_name="INDEX ID", long, multiple_occurrences=true, use_delimiter=true)]
+    /// IDs of the indexes to run the indexer for.
     pub index_ids: Vec<String>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Args, Debug, PartialEq)]
 pub struct RunSearcherArgs {
+    #[clap(required=true)]
+    /// Quickwit config file.
+    #[clap(name="config", value_name="CONFIG", env="QW_CONFIG", long)]
+    #[clap(parse(try_from_str=Uri::try_new))]
     pub config_uri: Uri,
+    #[clap(name="data-dir", value_name="DATA DIR", env="QW_DATA_DIR", long)]
+    /// Where data is persisted. Override data-dir defined in config file, default is `./qwdata`.
     pub data_dir_path: Option<PathBuf>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Subcommand, Debug, PartialEq)]
 pub enum ServiceCliCommand {
     RunSearcher(RunSearcherArgs),
     RunIndexer(RunIndexerArgs),

@@ -20,6 +20,7 @@
 use std::env;
 use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{bail, Context};
 
@@ -95,6 +96,14 @@ impl Uri {
         } else {
             None
         }
+    }
+}
+
+impl FromStr for Uri {
+    type Err = anyhow::Error;
+    fn from_str(uri: &str) -> Result<Self, anyhow::Error> {
+        let uri = Uri::try_new(uri)?;
+        Ok(uri)
     }
 }
 

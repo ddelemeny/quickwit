@@ -20,16 +20,22 @@
 use std::env;
 
 use anyhow::Context;
-use clap::{load_yaml, App, AppSettings};
+use clap::{Parser, IntoApp, AppSettings};
 use opentelemetry::global;
 use opentelemetry::sdk::propagation::TraceContextPropagator;
-use quickwit_cli::cli::CliCommand;
+use quickwit_cli::cli::{CliCommand};
 use quickwit_cli::QW_JAEGER_ENABLED_ENV_KEY;
 use quickwit_telemetry::payload::TelemetryEvent;
 use tracing::{info, Level};
 use tracing_subscriber::fmt::time::UtcTime;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
+
+#[derive(Parser, Debug, PartialEq)]
+pub struct Cli {
+    #[clap(subcommand)]
+    command: CliCommand,
+}
 
 fn setup_logging_and_tracing(level: Level) -> anyhow::Result<()> {
     #[cfg(feature = "tokio-console")]
@@ -92,11 +98,12 @@ async fn main() -> anyhow::Result<()> {
         env!("GIT_COMMIT_HASH")
     );
 
-    let yaml = load_yaml!("cli.yaml");
-    let app = App::from(yaml)
+    // NOTE: the idiomatic Parser::parse method of clap's derive api
+    // could be used to retrieve the command, but the derive api expects &str
+    // and doesn't play well with dynamic Strings for version and about.
+    let app = Cli::into_app()
         .version(version_text.as_str())
         .about(about_text.as_str())
-        .license("AGPLv3.0")
         .setting(AppSettings::DisableHelpSubcommand);
 
     let matches = app.get_matches();
