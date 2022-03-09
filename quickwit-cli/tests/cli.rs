@@ -90,6 +90,21 @@ async fn test_cmd_create() -> Result<()> {
         .unwrap();
     assert_eq!(index_metadata.index_id, test_env.index_id);
 
+    // Create with empty string metastore uri.
+    // FIXME: a validation test should be closer to the config module
+    let index_id = append_random_suffix("test-create-cmd-empty-metastore-uri");
+    let test_env = create_test_env(index_id, TestStorageType::LocalFileSystem)?;
+    make_command(
+        format!(
+            "index create --index-config {} --config {}",
+            test_env.resource_files["index_config"].display(),
+            test_env.resource_files["config_empty_uri"].display(),
+        )
+        .as_str(),
+    )
+    .assert()
+    .failure();
+
     // Create without giving `index-uri`.
     let index_id = append_random_suffix("test-create-cmd-no-index-uri");
     let test_env = create_test_env(index_id, TestStorageType::LocalFileSystem)?;

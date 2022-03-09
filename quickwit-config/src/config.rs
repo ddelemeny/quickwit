@@ -43,11 +43,9 @@ fn default_data_dir_path() -> PathBuf {
 // For a given index `index-id`, it means that we have the metastore file
 // in  `./qwdata/indexes/{index-id}/metastore.json` and splits in
 // dir `./qwdata/indexes/{index-id}/splits`.
-fn default_metastore_and_index_root_uri(data_dir_path: &Path) -> String {
+fn default_metastore_and_index_root_uri(data_dir_path: &Path) -> Uri {
     Uri::try_new(&data_dir_path.join("indexes").to_string_lossy())
         .expect("Default data dir `./qwdata` value is invalid.")
-        .as_ref()
-        .to_string()
 }
 
 fn default_node_id() -> String {
@@ -150,6 +148,30 @@ pub struct StorageConfig {
     pub s3_config: S3Config,
 }
 
+mod uri_serde {
+    use quickwit_common::uri::Uri;
+    use serde::de::{self, Deserialize, Deserializer};
+    use serde::ser::Serializer;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Uri>, D::Error>
+    where D: Deserializer<'de> {
+        let s: String = Option::deserialize(deserializer).unwrap().unwrap();
+        if !s.is_empty() {
+            return Ok(Some(Uri::try_new(&s).unwrap()));
+        }
+        return Err(de::Error::invalid_value(
+            de::Unexpected::Str(&s),
+            &"non-empty uri",
+        ));
+    }
+    pub fn serialize<S>(uri: &Option<Uri>, serializer: S) -> Result<S::Ok, S::Error>
+    where S: Serializer {
+        if let Some(ref u) = *uri {
+            return serializer.serialize_str(&u.as_ref());
+        }
+        serializer.serialize_none()
+    }
+}
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct QuickwitConfig {
@@ -162,8 +184,12 @@ pub struct QuickwitConfig {
     pub rest_listen_port: u16,
     #[serde(default)]
     pub peer_seeds: Vec<String>,
-    metastore_uri: Option<String>,
-    default_index_root_uri: Option<String>,
+    #[serde(default)]
+    #[serde(with = "uri_serde")]
+    metastore_uri: Option<Uri>,
+    #[serde(default)]
+    #[serde(with = "uri_serde")]
+    default_index_root_uri: Option<Uri>,
     #[serde(default = "default_data_dir_path")]
     #[serde(rename = "data_dir")]
     pub data_dir_path: PathBuf,
@@ -290,6 +316,7 @@ impl QuickwitConfig {
     }
 }
 
+// TODO: return Uris instead of Strings
 impl QuickwitConfig {
     pub fn metastore_uri(&self) -> String {
         self.metastore_uri

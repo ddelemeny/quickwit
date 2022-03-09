@@ -204,6 +204,14 @@ pub fn create_test_env(index_id: String, storage_type: TestStorageType) -> anyho
             .replace("#data_dir", &data_dir_path.to_str().unwrap().to_string())
             .replace("#rest_listen_port", &rest_listen_port.to_string()),
     )?;
+    let quickwit_config_empty_uri_path = resources_dir_path.join("config_empty_uri.yaml");
+    fs::write(
+        &quickwit_config_empty_uri_path,
+        DEFAULT_QUICKWIT_CONFIG
+            .replace("#metastore_uri", "\"\"")
+            .replace("#data_dir", &data_dir_path.to_str().unwrap().to_string())
+            .replace("#rest_listen_port", &rest_listen_port.to_string()),
+    )?;
     let log_docs_path = resources_dir_path.join("logs.json");
     fs::write(&log_docs_path, LOGS_JSON_DOCS)?;
     let wikipedia_docs_path = resources_dir_path.join("wikis.json");
@@ -211,6 +219,7 @@ pub fn create_test_env(index_id: String, storage_type: TestStorageType) -> anyho
 
     let mut resource_files = HashMap::new();
     resource_files.insert("config", quickwit_config_path);
+    resource_files.insert("config_empty_uri", quickwit_config_empty_uri_path);
     resource_files.insert("index_config", index_config_path);
     resource_files.insert("index_config_without_uri", index_config_without_uri_path);
     resource_files.insert("logs", log_docs_path);
